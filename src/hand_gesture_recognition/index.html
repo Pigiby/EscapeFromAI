@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Gesture Recognition Game</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00ff88, #00ccff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .game-area {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .video-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .video-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border-radius: 15px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Effetto Specchio */
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1); /* Allinea il disegno allo specchio */
+        }
+
+        .status-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .gesture-label {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .current-sign { color: #00ff88; }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-start { background: #ff6b6b; color: white; }
+        .btn-capture { background: #00ff88; color: #000; }
+        .btn-capture:disabled { background: #444; color: #888; cursor: not-allowed; }
+        .btn-hint { background: #00ccff; color: #000; }
+        .btn-hint:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+        .stats-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            min-width: 250px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-value { color: #00ff88; font-weight: bold; }
+
+        .message-display {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            display: none;
+            z-index: 20;
+        }
+
+        .success { background: rgba(0, 255, 136, 0.9); color: black; }
+        .error { background: rgba(255, 107, 107, 0.9); color: white; }
+
+        .loading-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        /* Intro Sequence Overlay */
+        .intro-sequence {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .sequence-preview { display: flex; gap: 15px; margin: 20px; }
+        .sequence-item { background: #00ff88; color: black; padding: 15px; border-radius: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Hand Gesture Game</h1>
+        
+        <div class="game-area">
+            <div class="video-section">
+                <div class="loading-screen" id="loading">Caricamento Modello AI...</div>
+                
+                <div class="video-container">
+                    <video id="webcam" autoplay playsinline></video>
+                    <canvas id="canvas" width="640" height="480"></canvas>
+                    
+<div class="status-overlay">
+                        <div class="gesture-label current-sign">Sign: <span id="currentSign">None</span></div>
+                    </div>
+
+                    <div id="message" class="message-display"></div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn btn-start" id="startBtn" disabled>Inizia Partita</button>
+                    <button class="btn btn-capture" id="captureBtn" disabled>Cattura (C)</button>
+                    <button class="btn btn-hint" id="hintBtn" disabled>Suggerimento (H)</button>
+                </div>
+            </div>
+
+            <div class="stats-panel">
+                <h2>Statistiche</h2>
+                <div class="stat-item"><span>Corretti</span><span class="stat-value" id="capturedCount">0</span></div>
+                <div class="stat-item"><span>Errori</span><span class="stat-value" id="wrongCount">0</span></div>
+                <div class="stat-item"><span>Precisione</span><span class="stat-value" id="accuracy">0%</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="intro-sequence" id="introSequence">
+        <h2>Memorizza la sequenza!</h2>
+        <div class="sequence-preview" id="sequencePreview"></div>
+        <h1 id="introTimer">3</h1>
+    </div>
+
+    <div class="intro-sequence" id="gameOverSequence">
+        <h2>Partita Terminata!</h2>
+        <p id="finalScore" style="font-size: 1.5rem; margin: 20px;">Punteggio Finale: 0</p>
+        <div class="sequence-preview">
+            <button class="btn btn-capture" id="yesBtn" style="font-size: 1.2rem; padding: 20px 40px;">GIOCA ANCORA</button>
+            <button class="btn btn-start" id="noBtn" style="font-size: 1.2rem; padding: 20px 40px;">ESCI</button>
+        </div>
+    </div>
+
+    <script type="module">
+    // Importiamo le classi direttamente dal pacchetto ESM
+    import { GestureRecognizer, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9";
+
+    // Configurazione
+    const MODEL_PATH = '/models/hand_gesture/gesture_recognizer.task'; 
+    const GESTURES = ['Closed_Fist', 'Open_Palm', 'Pointing_Up', 'Thumb_Down', 'Thumb_Up', 'Victory', 'ILoveYou'];
+    
+    let gestureRecognizer;
+    let lastVideoTime = -1;
+    let currentGesture = "None";
+
+    let gameState = {
+        isPlaying: false,
+        sequence: [],
+        currentIndex: 0,
+        correct: 0,
+        wrong: 0
+    };
+
+    // Elementi DOM
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const loading = document.getElementById('loading');
+    const startBtn = document.getElementById('startBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const hintBtn = document.getElementById('hintBtn');
+
+    // Inizializzazione AI
+    async function init() {
+        try {
+            // Carichiamo il compilatore WASM
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm"
+            );
+            
+            gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+                baseOptions: { 
+                    modelAssetPath: MODEL_PATH, 
+                    delegate: "GPU" 
+                },
+                runningMode: "VIDEO",
+                numHands: 1
+            });
+
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+            video.srcObject = stream;
+            
+            video.addEventListener('loadeddata', () => {
+                loading.style.display = 'none';
+                startBtn.disabled = false;
+                renderLoop();
+            });
+        } catch (err) {
+            loading.textContent = "Errore: " + err.message;
+            console.error(err);
+        }
+    }
+
+    // Loop di rilevamento
+    function renderLoop() {
+        if (video.currentTime !== lastVideoTime) {
+            lastVideoTime = video.currentTime;
+            const results = gestureRecognizer.recognizeForVideo(video, Date.now());
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (results.gestures.length > 0) {
+                currentGesture = results.gestures[0][0].categoryName;
+                document.getElementById('currentSign').textContent = currentGesture;
+                
+                if(results.landmarks) {
+                    drawLandmarks(results.landmarks[0]);
+                }
+            } else {
+                currentGesture = "None";
+                document.getElementById('currentSign').textContent = "---";
+            }
+        }
+        requestAnimationFrame(renderLoop);
+    }
+
+    function drawLandmarks(landmarks) {
+        ctx.fillStyle = "#00ff88";
+        landmarks.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    // Le funzioni di gioco rimangono le stesse (startNewRound, capture, ecc...)
+    // Assicurati di includerle qui dentro o renderle globali
+    window.startNewRound = function() {
+        gameState.sequence = Array.from({length: 3}, () => GESTURES[Math.floor(Math.random() * GESTURES.length)]);
+        gameState.currentIndex = 0;
+        
+        const intro = document.getElementById('introSequence');
+        const preview = document.getElementById('sequencePreview');
+        preview.innerHTML = '';
+        gameState.sequence.forEach(s => {
+            const div = document.createElement('div');
+            div.className = 'sequence-item';
+            div.textContent = s;
+            preview.appendChild(div);
+        });
+
+        intro.style.display = 'flex';
+        let count = 3;
+        document.getElementById('introTimer').textContent = count;
+        const timer = setInterval(() => {
+            count--;
+            document.getElementById('introTimer').textContent = count;
+            if(count <= 0) {
+                clearInterval(timer);
+                intro.style.display = 'none';
+                gameState.isPlaying = true;
+                captureBtn.disabled = false;
+                hintBtn.disabled = false;
+            }
+        }, 1000);
+    };
+
+    window.showHint = function() {
+        if(!gameState.isPlaying) return;
+        const intro = document.getElementById('introSequence');
+        const preview = document.getElementById('sequencePreview');
+        preview.innerHTML = '';
+        // Show remaining gestures
+        for(let i = gameState.currentIndex; i < gameState.sequence.length; i++) {
+            const item = document.createElement('div');
+            item.className = 'sequence-item';
+            item.textContent = gameState.sequence[i];
+            preview.appendChild(item);
+        }
+        intro.style.display = 'flex';
+        setTimeout(() => intro.style.display = 'none', 2000);
+    };
+
+    window.capture = function() {
+        if(!gameState.isPlaying) return;
+        const target = gameState.sequence[gameState.currentIndex];
+        if(currentGesture === target) {
+            gameState.correct++;
+            gameState.currentIndex++;
+            showMsg("Corretto!", "success");
+        } else {
+            gameState.wrong++;
+            showMsg("Sbagliato!", "error");
+        }
+        updateStats();
+        if(gameState.currentIndex >= gameState.sequence.length) {
+            gameState.isPlaying = false;
+            captureBtn.disabled = true;
+            hintBtn.disabled = true;
+            // Show game over screen
+            const gameOver = document.getElementById('gameOverSequence');
+            document.getElementById('finalScore').textContent = 'Punteggio Finale: ' + gameState.correct + '/' + gameState.sequence.length;
+            gameOver.style.display = 'flex';
+        } else {
+        }
+    };
+
+    function updateStats() {
+        document.getElementById('capturedCount').textContent = gameState.correct;
+        document.getElementById('wrongCount').textContent = gameState.wrong;
+        const total = gameState.correct + gameState.wrong;
+        document.getElementById('accuracy').textContent = Math.round((gameState.correct / total) * 100) + "%";
+    }
+
+    function showMsg(txt, cls) {
+        const m = document.getElementById('message');
+        m.textContent = txt;
+        m.className = `message-display ${cls}`;
+        m.style.display = 'block';
+        setTimeout(() => m.style.display = 'none', 1000);
+    }
+
+    startBtn.addEventListener('click', () => {
+        startBtn.style.display = 'none';
+        window.startNewRound();
+    });
+
+    captureBtn.addEventListener('click', window.capture);
+    hintBtn.addEventListener('click', window.showHint);
+    
+    document.getElementById('yesBtn').addEventListener('click', () => {
+        document.getElementById('gameOverSequence').style.display = 'none';
+        window.startNewRound();
+    });
+    
+    document.getElementById('noBtn').addEventListener('click', () => {
+        document.getElementById('gameOverSequence').style.display = 'none';
+        gameState.correct = 0;
+        gameState.wrong = 0;
+        gameState.currentIndex = 0;
+        updateStats();
+        startBtn.style.display = 'block';
+        startBtn.disabled = false;
+    });
+    
+    window.addEventListener('keydown', (e) => {
+        if(e.key.toLowerCase() === 'c') window.capture();
+        if(e.key.toLowerCase() === 'h') window.showHint();
+    });
+
+    init();
+</script>
+</body>
+</html>

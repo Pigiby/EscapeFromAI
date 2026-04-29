@@ -1,0 +1,34 @@
+{
+  "0": {
+    "label": "Unknown",
+    "positive_prompt": "Abstract hand gesture illustration, neutral non-specific hand pose, natural human hand, softly lit, clean vector or 3D style, minimal design, centered composition, neutral expression, high quality, isolated on plain or transparent background"
+  },
+  "1": {
+    "label": "Closed_Fist",
+    "positive_prompt": "Closed fist hand gesture, strong clenched fist, centered composition, clean vector style or 3D render, symbol of strength and solidarity, smooth skin shading, high contrast lighting, isolated on transparent background, professional emoji style"
+  },
+  "2": {
+    "label": "Open_Palm",
+    "positive_prompt": "Open palm hand gesture facing forward, fingers spread naturally, calm and welcoming pose, centered composition, clean vector illustration style, soft lighting, smooth shading, friendly emoji design, isolated on transparent background"
+  },
+  "3": {
+    "label": "Pointing_Up",
+    "positive_prompt": "Hand gesture pointing upward with index finger raised, clear directional pose, centered composition, clean modern vector style, expressive friendly hand, high contrast, smooth shading, isolated on transparent background, emoji style"
+  },
+  "4": {
+    "label": "Thumb_Down",
+    "positive_prompt": "Thumbs down hand gesture, clear downward thumb signal, centered composition, clean vector illustration style, simple expressive design, smooth shading, high contrast, isolated on transparent background, emoji icon style"
+  },
+  "5": {
+    "label": "Thumb_Up",
+    "positive_prompt": "Thumbs up hand gesture, single raised thumb, positive approval sign, centered composition, clean flat vector or soft 3D emoji style, vibrant colors, glossy highlights, friendly expressive design, isolated on transparent background"
+  },
+  "6": {
+    "label": "Victory",
+    "positive_prompt": "Victory hand gesture with index and middle fingers raised forming a V sign, celebratory positive pose, centered composition, clean vector illustration style, soft lighting, expressive emoji design, high contrast, isolated on transparent background"
+  },
+  "7": {
+    "label": "ILoveYou",
+    "positive_prompt": "I love you hand gesture (ASL sign), hand with thumb, index finger, and pinky extended, expressive friendly pose, centered composition, clean modern vector or 3D emoji style, vibrant colors, soft shading, warm positive emotion, isolated on transparent background"
+  }
+}
