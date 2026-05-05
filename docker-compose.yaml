@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  comfy-api-runner:
+    build: ./my_project/gesture_recognition
+    container_name: comfy_all_in_one
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./my_project/gesture_recognition:/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  escpa-room:
+    build: ./my_project/
+    container_name: vault_escape_room
+    ports:
+      - "8080:5000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./my_project:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_MODEL=gemma3:4b
+    # This allows the Streamlit app to talk to the API runner using its service name
+    depends_on:
+      - comfy-api-runner
+    restart: unless-stopped
