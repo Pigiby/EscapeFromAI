@@ -1,0 +1,5 @@
+/venv
+/.venv
+/my_project/.env
+/my_project/venv
+/my_project/gesture_recognition/static/assets/image_sequence
