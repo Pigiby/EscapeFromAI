@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIPHER // Hand Gesture Lock</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Special+Elite&family=VT323&family=Courier+Prime:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --amber: #e8a020;
+            --amber-dim: #7a4f08;
+            --amber-glow: #ffbe4a;
+            --red: #c0392b;
+            --red-bright: #ff4433;
+            --green: #39e050;
+            --green-dim: #0d3a14;
+            --bg: #080a06;
+            --bg-mid: #0e1209;
+            --panel: #0a0d08;
+            --border: #1e2b15;
+            --text: #c8c0a0;
+            --text-dim: #665e44;
+            --scanline: rgba(0, 0, 0, 0.18);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @keyframes flicker {
+
+            0%,
+            19%,
+            21%,
+            23%,
+            25%,
+            54%,
+            56%,
+            100% {
+                opacity: 1;
+            }
+
+            20%,
+            24%,
+            55% {
+                opacity: 0.6;
+            }
+        }
+
+        @keyframes glitch {
+
+            0%,
+            100% {
+                text-shadow: -2px 0 var(--red), 2px 0 var(--green);
+                clip-path: none;
+            }
+
+            20% {
+                text-shadow: 2px 0 var(--red), -2px 0 var(--green);
+                clip-path: inset(10% 0 80% 0);
+                transform: skewX(-2deg);
+            }
+
+            40% {
+                text-shadow: -2px 0 var(--red), 2px 0 var(--green);
+                clip-path: inset(60% 0 20% 0);
+                transform: skewX(1deg);
+            }
+
+            60% {
+                clip-path: none;
+                transform: skewX(0);
+            }
+        }
+
+        @keyframes pulse-border {
+
+            0%,
+            100% {
+                box-shadow: 0 0 8px var(--amber-dim), inset 0 0 8px rgba(232, 160, 32, 0.05);
+            }
+
+            50% {
+                box-shadow: 0 0 20px var(--amber), inset 0 0 15px rgba(232, 160, 32, 0.1);
+            }
+        }
+
+        @keyframes crt-on {
+            0% {
+                transform: scaleY(0.01) scaleX(1.1);
+                opacity: 0.5;
+            }
+
+            30% {
+                transform: scaleY(0.05) scaleX(1.05);
+                opacity: 0.8;
+            }
+
+            60% {
+                transform: scaleY(1.01) scaleX(1.01);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scaleY(1) scaleX(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes scanline-move {
+            0% {
+                transform: translateY(-100%);
+            }
+
+            100% {
+                transform: translateY(100vh);
+            }
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+            }
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            20% {
+                transform: translateX(-6px);
+            }
+
+            40% {
+                transform: translateX(6px);
+            }
+
+            60% {
+                transform: translateX(-4px);
+            }
+
+            80% {
+                transform: translateX(4px);
+            }
+        }
+
+        @keyframes stamp-in {
+            0% {
+                transform: translateX(-50%) scale(2) rotate(-5deg);
+                opacity: 0;
+            }
+
+            60% {
+                transform: translateX(-50%) scale(0.95) rotate(1deg);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateX(-50%) scale(1) rotate(0deg);
+                opacity: 1;
+            }
+        }
+
+        body {
+            font-family: 'Courier Prime', monospace;
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--text);
+            overflow-x: hidden;
+            cursor: crosshair;
+        }
+
+        /* Global scanline overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(0deg,
+                    transparent,
+                    transparent 2px,
+                    var(--scanline) 2px,
+                    var(--scanline) 4px);
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            top: -100%;
+            left: 0;
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(transparent, rgba(255, 255, 255, 0.03) 50%, transparent);
+            animation: scanline-move 8s linear infinite;
+            pointer-events: none;
+            z-index: 9998;
+        }
+
+        /* ── HEADER ─────────────────────────────────────────── */
+        .header {
+            width: 100%;
+            max-width: 1200px;
+            padding: 28px 30px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .header-tag {
+            font-family: 'VT323', monospace;
+            font-size: 0.9rem;
+            letter-spacing: 6px;
+            color: var(--amber-dim);
+            text-transform: uppercase;
+        }
+
+        h1 {
+            font-family: 'Special Elite', cursive;
+            font-size: 3.2rem;
+            letter-spacing: 8px;
+            color: var(--amber);
+            text-transform: uppercase;
+            animation: flicker 6s infinite;
+            text-shadow: 0 0 30px rgba(232, 160, 32, 0.5), 0 0 60px rgba(232, 160, 32, 0.2);
+        }
+
+        .header-subtitle {
+            font-family: 'VT323', monospace;
+            font-size: 1rem;
+            color: var(--text-dim);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        .header-divider {
+            width: 100%;
+            max-width: 700px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--amber-dim), transparent);
+            margin: 16px 0 0;
+        }
+
+        /* ── MAIN LAYOUT ────────────────────────────────────── */
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            padding: 20px 30px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .game-area {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+        }
+
+        /* ── VIDEO PANEL ────────────────────────────────────── */
+        .video-section {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 16px;
+            position: relative;
+            animation: pulse-border 4s ease-in-out infinite;
+        }
+
+        .panel-label {
+            font-family: 'VT323', monospace;
+            font-size: 0.8rem;
+            letter-spacing: 4px;
+            color: var(--amber-dim);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-label::before {
+            content: '▶';
+            color: var(--red-bright);
+            animation: blink 1s step-end infinite;
+        }
+
+        .video-container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border-radius: 2px;
+            overflow: hidden;
+            background: #000;
+            /* CRT curvature illusion */
+            box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.8), 0 0 0 2px #111, 0 0 30px rgba(57, 224, 80, 0.08);
+        }
+
+        /* CRT vignette */
+        .video-container::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.6) 100%);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            filter: brightness(0.9) saturate(0.7) contrast(1.1);
+            animation: crt-on 0.6s ease-out 0.5s both;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            z-index: 2;
+        }
+
+        .status-overlay {
+            position: absolute;
+            top: 14px;
+            left: 14px;
+            right: 14px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .gesture-label {
+            background: rgba(0, 0, 0, 0.75);
+            padding: 6px 14px;
+            border: 1px solid var(--green-dim);
+            border-radius: 2px;
+            font-family: 'VT323', monospace;
+            font-size: 1.15rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+        }
+
+        .current-sign {
+            color: var(--green);
+            text-shadow: 0 0 10px rgba(57, 224, 80, 0.6);
+        }
+
+        .message-display {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 28px;
+            border-radius: 2px;
+            font-family: 'Special Elite', cursive;
+            font-size: 1.3rem;
+            font-weight: bold;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            display: none;
+            z-index: 20;
+            text-align: center;
+            animation: stamp-in 0.25s ease-out forwards;
+        }
+
+        .success {
+            background: rgba(10, 25, 12, 0.92);
+            border: 2px solid var(--green);
+            color: var(--green);
+            text-shadow: 0 0 15px rgba(57, 224, 80, 0.8);
+            box-shadow: 0 0 20px rgba(57, 224, 80, 0.3);
+        }
+
+        .error {
+            background: rgba(25, 5, 5, 0.92);
+            border: 2px solid var(--red-bright);
+            color: var(--red-bright);
+            text-shadow: 0 0 15px rgba(255, 68, 51, 0.8);
+            animation: stamp-in 0.25s ease-out forwards, shake 0.3s ease 0.1s;
+        }
+
+        /* ── CONTROLS ───────────────────────────────────────── */
+        .controls {
+            margin-top: 16px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border: 1px solid;
+            border-radius: 2px;
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            font-weight: normal;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-transform: uppercase;
+            position: relative;
+            background: transparent;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: currentColor;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .btn:not(:disabled):hover::before {
+            opacity: 0.12;
+        }
+
+        .btn-start {
+            border-color: var(--red-bright);
+            color: var(--red-bright);
+            text-shadow: 0 0 8px rgba(255, 68, 51, 0.5);
+        }
+
+        .btn-start:not(:disabled):hover {
+            box-shadow: 0 0 15px rgba(255, 68, 51, 0.4);
+        }
+
+        .btn-capture {
+            border-color: var(--green);
+            color: var(--green);
+            text-shadow: 0 0 8px rgba(57, 224, 80, 0.5);
+        }
+
+        .btn-capture:not(:disabled):hover {
+            box-shadow: 0 0 15px rgba(57, 224, 80, 0.4);
+        }
+
+        .btn-hint {
+            border-color: var(--amber);
+            color: var(--amber);
+            text-shadow: 0 0 8px rgba(232, 160, 32, 0.5);
+        }
+
+        .btn-hint:not(:disabled):hover {
+            box-shadow: 0 0 15px rgba(232, 160, 32, 0.4);
+        }
+
+        .btn:disabled {
+            border-color: #252520;
+            color: var(--text-dim);
+            cursor: not-allowed;
+            text-shadow: none;
+            opacity: 0.5;
+        }
+
+        /* ── STATS PANEL ────────────────────────────────────── */
+        .stats-panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 20px;
+            min-width: 220px;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .stats-panel h2 {
+            font-family: 'Special Elite', cursive;
+            font-size: 1rem;
+            letter-spacing: 5px;
+            color: var(--amber-dim);
+            text-transform: uppercase;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(30, 43, 21, 0.5);
+            font-family: 'VT323', monospace;
+            font-size: 1.1rem;
+            letter-spacing: 2px;
+            color: var(--text-dim);
+        }
+
+        .stat-value {
+            font-size: 1.4rem;
+            color: var(--amber);
+            text-shadow: 0 0 8px rgba(232, 160, 32, 0.4);
+        }
+
+        .stat-value.danger {
+            color: var(--red-bright);
+            text-shadow: 0 0 8px rgba(255, 68, 51, 0.4);
+        }
+
+        /* Lore blurb */
+        .lore-box {
+            margin-top: auto;
+            padding-top: 18px;
+            border-top: 1px solid var(--border);
+            font-family: 'Special Elite', cursive;
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── LOADING ────────────────────────────────────────── */
+        .loading-screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            gap: 14px;
+        }
+
+        .loading-text {
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            color: var(--green);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            animation: blink 0.9s step-end infinite;
+        }
+
+        .loading-bar-wrap {
+            width: 200px;
+            height: 4px;
+            background: #0d1a0d;
+            border: 1px solid var(--green-dim);
+        }
+
+        .loading-bar-fill {
+            height: 100%;
+            background: var(--green);
+            width: 0%;
+            animation: load-fill 3s ease-in-out infinite;
+            box-shadow: 0 0 8px var(--green);
+        }
+
+        @keyframes load-fill {
+            0% {
+                width: 0%;
+            }
+
+            60% {
+                width: 85%;
+            }
+
+            100% {
+                width: 95%;
+            }
+        }
+
+        /* ── INTRO / OVERLAY MODALS ─────────────────────────── */
+        .intro-sequence {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.92);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            gap: 16px;
+            /* paranoia grid */
+            background-image:
+                linear-gradient(rgba(232, 160, 32, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(232, 160, 32, 0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .intro-sequence h2 {
+            font-family: 'Special Elite', cursive;
+            font-size: 1.6rem;
+            letter-spacing: 6px;
+            color: var(--amber);
+            text-transform: uppercase;
+            text-shadow: 0 0 20px rgba(232, 160, 32, 0.5);
+        }
+
+        .sequence-preview {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 4px 0;
+        }
+
+        .sequence-item {
+            background: #0a0d08;
+            border: 1px solid var(--amber-dim);
+            padding: 10px;
+            border-radius: 2px;
+            width: 160px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 15px rgba(232, 160, 32, 0.15);
+        }
+
+        .sequence-item img {
+            max-width: 100%;
+            border-radius: 2px;
+            object-fit: contain;
+            filter: brightness(0.95) saturate(0.8);
+        }
+
+        .sequence-label {
+            font-family: 'VT323', monospace;
+            color: var(--amber);
+            font-size: 1rem;
+            letter-spacing: 2px;
+            margin-top: 8px;
+            text-transform: uppercase;
+        }
+
+        #introTimer {
+            font-family: 'Special Elite', cursive;
+            font-size: 5rem;
+            color: var(--red-bright);
+            text-shadow: 0 0 40px rgba(255, 68, 51, 0.7);
+            animation: flicker 0.3s step-end infinite;
+            min-height: 80px;
+        }
+
+        /* ── GAME OVER ──────────────────────────────────────── */
+        #gameOverSequence h2 {
+            font-family: 'Special Elite', cursive;
+            font-size: 2rem;
+            letter-spacing: 6px;
+            color: var(--amber);
+            text-transform: uppercase;
+            animation: glitch 4s ease-in-out infinite;
+        }
+
+        #finalScore {
+            font-family: 'VT323', monospace;
+            font-size: 1.6rem;
+            letter-spacing: 4px;
+            color: var(--text);
+            margin: 12px 0;
+        }
+
+        /* ── WARNING TAPE DECORATION ────────────────────────── */
+        .tape-border {
+            width: 100%;
+            max-width: 1200px;
+            height: 16px;
+            background: repeating-linear-gradient(-45deg,
+                    var(--amber) 0px,
+                    var(--amber) 10px,
+                    #0a0d08 10px,
+                    #0a0d08 20px);
+            opacity: 0.35;
+        }
+
+        /* ── FOOTER ─────────────────────────────────────────── */
+        .footer {
+            font-family: 'VT323', monospace;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            letter-spacing: 3px;
+            padding: 20px 0 30px;
+            text-align: center;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="tape-border"></div>
+
+    <div class="header">
+        <div class="header-tag">// CLASSIFIED SYSTEM ACCESS //</div>
+        <h1>Cipher Lock</h1>
+        <div class="header-subtitle">Biometric Sequence Verification — Level 2</div>
+        <div class="header-divider"></div>
+    </div>
+
+    <div class="container">
+        <div class="game-area">
+            <div class="video-section">
+                <div class="panel-label">Live Feed — Gesture Scanner</div>
+
+                <div class="loading-screen" id="loading">
+                    <div class="loading-text">Initializing AI &amp; generating images…</div>
+                    <div class="loading-bar-wrap">
+                        <div class="loading-bar-fill"></div>
+                    </div>
+                </div>
+
+                <div class="video-container">
+                    <video id="webcam" autoplay playsinline></video>
+                    <canvas id="canvas" width="640" height="480"></canvas>
+
+                    <div class="status-overlay">
+                        <div class="gesture-label current-sign">Detected: <span id="currentSign">---</span></div>
+                    </div>
+
+                    <div id="message" class="message-display"></div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn btn-start" id="startBtn" disabled>▶ Start</button>
+                    <button class="btn btn-capture" id="captureBtn" disabled>⬛ Capture [C]</button>
+                    <button class="btn btn-hint" id="hintBtn" disabled>? Hint [H]</button>
+                </div>
+            </div>
+
+            <!-- Stats Panel -->
+            <div class="stats-panel">
+                <h2>// Status</h2>
+                <div class="stat-item">
+                    <span>Correct</span>
+                    <span class="stat-value" id="capturedCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Wrong</span>
+                    <span class="stat-value danger" id="wrongCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Progress</span>
+                    <span class="stat-value" id="progress">0 / 0</span>
+                </div>
+
+                <div class="lore-box">
+                    FACILITY 7 — ACCESS RESTRICTED<br>
+                    Biometric cipher required to unlock<br>
+                    the terminal. Perform each gesture<br>
+                    in the exact sequence shown.<br>
+                    Deviation will trigger lockdown.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tape-border" style="margin-top: auto;"></div>
+    <div class="footer">CIPHER LOCK v3.1 // UNAUTHORIZED ACCESS WILL BE PROSECUTED</div>
+
+    <!-- Intro / Hint overlay -->
+    <div class="intro-sequence" id="introSequence">
+        <h2 id="introTitle">Memorize the sequence!</h2>
+        <div class="sequence-preview" id="sequencePreview"></div>
+        <h1 id="introTimer">3</h1>
+    </div>
+
+    <!-- Game Over overlay -->
+    <div class="intro-sequence" id="gameOverSequence">
+        <h2 id="gameResultTitle">Sequence Complete!</h2>
+        <p id="finalScore">Correct: 0 | Wrong: 0</p>
+        <div class="sequence-preview">
+            <button class="btn btn-capture" id="nextLevelBtn"
+                style="display:none; font-size:1.3rem; padding:16px 36px; letter-spacing:4px;">
+                ▶ Next Level
+            </button>
+            <button class="btn btn-capture" id="yesBtn"
+                style="font-size:1.3rem; padding:16px 36px; letter-spacing:4px;">
+                ▶ Play Again
+            </button>
+            <button class="btn btn-start" id="noBtn" style="font-size:1.3rem; padding:16px 36px; letter-spacing:4px;">
+                ↺ Reset
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        window.onload = () => {
+            console.log("Initializing Level 2 pre-generation...");
+            fetch('http://localhost:5001/generate', {
+                method: 'POST',
+                mode: 'cors' // Ensure CORS is handled if your server is on a different port
+            })
+                .then(response => console.log("Level 2 generation started:", response.status))
+                .catch(e => console.error("Generation trigger failed:", e));
+        };
+        import { GestureRecognizer, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9";
+
+        const MODEL_PATH = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
+
+        let gestureRecognizer;
+        let lastVideoTime = -1;
+        let currentGesture = "None";
+
+        let gameState = {
+            isPlaying: false,
+            filenames: [],
+            currentIndex: 0,
+            correct: 0,
+            wrong: 0
+        };
+
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const loading = document.getElementById('loading');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const hintBtn = document.getElementById('hintBtn');
+
+        async function init() {
+            try {
+
+                const vision = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm"
+                );
+                gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+                    baseOptions: { modelAssetPath: MODEL_PATH, delegate: "GPU" },
+                    runningMode: "VIDEO",
+                    numHands: 1
+                });
+
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+
+                video.addEventListener('loadeddata', () => {
+                    loading.style.display = 'none';
+                    startBtn.disabled = false;
+                    renderLoop();
+                });
+            } catch (err) {
+                loading.querySelector('.loading-text').textContent = "Error: " + err.message;
+            }
+        }
+
+        function renderLoop() {
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                const results = gestureRecognizer.recognizeForVideo(video, Date.now());
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (results.gestures.length > 0) {
+                    currentGesture = results.gestures[0][0].categoryName;
+                    document.getElementById('currentSign').textContent = currentGesture;
+                } else {
+                    currentGesture = "None";
+                    document.getElementById('currentSign').textContent = "---";
+                }
+            }
+            requestAnimationFrame(renderLoop);
+        }
+
+        async function checkStatusAndStart() {
+            startBtn.disabled = true;
+            showMsg("Verifying images...", "success");
+
+            try {
+                const response = await fetch('http://localhost:5001/status');
+                const data = await response.json();
+
+                if (data.complete && data.filenames.length > 0) {
+                    gameState.filenames = data.filenames.sort((a, b) => {
+                        const numA = parseInt(a.split('_').pop());
+                        const numB = parseInt(b.split('_').pop());
+                        return numA - numB;
+                    });
+                    window.startNewRound();
+                } else {
+                    showMsg("AI still processing. Please wait...", "error");
+                    startBtn.disabled = false;
+                }
+            } catch (e) {
+                showMsg("Server error!", "error");
+                startBtn.disabled = false;
+            }
+        }
+
+        window.startNewRound = function () {
+            gameState.currentIndex = 0;
+            gameState.correct = 0;
+            gameState.wrong = 0;
+            updateStats();
+
+            const intro = document.getElementById('introSequence');
+            const preview = document.getElementById('sequencePreview');
+            document.getElementById('introTitle').textContent = "Memorize the sequence!";
+            preview.innerHTML = '';
+
+            gameState.filenames.forEach((fileName) => {
+                const div = document.createElement('div');
+                div.className = 'sequence-item';
+
+                const img = document.createElement('img');
+                img.src = `static/assets/${fileName}`;
+
+                const label = document.createElement('div');
+                label.className = 'sequence-label';
+                label.textContent = fileName.split('_').slice(0, -1).join(' ').replace('_', ' ');
+
+                div.appendChild(img);
+                div.appendChild(label);
+                preview.appendChild(div);
+            });
+
+            intro.style.display = 'flex';
+            let count = 3;
+            document.getElementById('introTimer').textContent = count;
+
+            const timer = setInterval(() => {
+                count--;
+                document.getElementById('introTimer').textContent = count > 0 ? count : '';
+                if (count <= 0) {
+                    clearInterval(timer);
+                    intro.style.display = 'none';
+                    gameState.isPlaying = true;
+                    captureBtn.disabled = false;
+                    hintBtn.disabled = false;
+                    startBtn.style.display = 'none';
+                }
+            }, 1000);
+        };
+
+        window.showHint = function () {
+            if (!gameState.isPlaying) return;
+            const intro = document.getElementById('introSequence');
+            const preview = document.getElementById('sequencePreview');
+            document.getElementById('introTitle').textContent = "Hint!";
+            document.getElementById('introTimer').textContent = "";
+            preview.innerHTML = '';
+
+            const currentFileName = gameState.filenames[gameState.currentIndex];
+            const div = document.createElement('div');
+            div.className = 'sequence-item';
+            const img = document.createElement('img');
+            img.src = img.src = `static/assets/${currentFileName}`;
+            div.appendChild(img);
+            preview.appendChild(div);
+
+            intro.style.display = 'flex';
+            setTimeout(() => intro.style.display = 'none', 1200);
+        };
+
+        window.capture = function () {
+            if (!gameState.isPlaying) return;
+
+            const currentFileName = gameState.filenames[gameState.currentIndex];
+            const expected = currentFileName.split('_').slice(0, -1).join('_');
+
+            if (currentGesture === expected) {
+                gameState.correct++;
+                gameState.currentIndex++;
+                showMsg("✓ CORRECT", "success");
+            } else {
+                gameState.wrong++;
+                showMsg(`✗ WRONG — Expected: ${expected.replace('_', ' ')}`, "error");
+            }
+
+            updateStats();
+
+            if (gameState.currentIndex >= gameState.filenames.length) {
+                endGame();
+            }
+        };
+
+        function endGame() {
+            gameState.isPlaying = false;
+            captureBtn.disabled = true;
+            hintBtn.disabled = true;
+            const gameOver = document.getElementById('gameOverSequence');
+            document.getElementById('gameResultTitle').textContent =
+                gameState.wrong === 0 ? "ACCESS GRANTED" : "Sequence Complete";
+            document.getElementById('finalScore').textContent =
+                `Correct: ${gameState.correct}   |   Wrong: ${gameState.wrong}`;
+            gameOver.style.display = 'flex';
+        }
+
+        function updateStats() {
+            document.getElementById('capturedCount').textContent = gameState.correct;
+            document.getElementById('wrongCount').textContent = gameState.wrong;
+            document.getElementById('progress').textContent =
+                `${gameState.currentIndex} / ${gameState.filenames.length}`;
+        }
+
+        function showMsg(txt, cls) {
+            const m = document.getElementById('message');
+            m.textContent = txt;
+            m.className = `message-display ${cls}`;
+            m.style.display = 'block';
+            setTimeout(() => m.style.display = 'none', 2000);
+        }
+
+        startBtn.addEventListener('click', checkStatusAndStart);
+        captureBtn.addEventListener('click', window.capture);
+        hintBtn.addEventListener('click', window.showHint);
+
+        document.getElementById('yesBtn').addEventListener('click', () => {
+            document.getElementById('gameOverSequence').style.display = 'none';
+            checkStatusAndStart();
+        });
+
+        document.getElementById('noBtn').addEventListener('click', () => {
+            location.reload();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'c') window.capture();
+            if (e.key.toLowerCase() === 'h') window.showHint();
+        });
+
+        init();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔓 The Vault — Prompt Injection Escape Room</title>
+    <style>
+        /* CSS adapted from the original Streamlit interface[cite: 1] */
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --bg-dark: #0a0a0f;
+            --panel-bg: #0d1117;
+            --neon-green: #00ff88;
+            --neon-blue: #00ccff;
+            --neon-red: #ff0055;
+            --text-dim: #c0c0c0;
+        }
+
+        body {
+            background: var(--bg-dark);
+            color: var(--text-dim);
+            font-family: 'Rajdhani', sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container { max-width: 800px; width: 100%; }
+
+        .vault-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.4rem;
+            font-weight: 900;
+            text-align: center;
+            background: linear-gradient(135deg, var(--neon-green), var(--neon-blue), var(--neon-red));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0;
+            letter-spacing: 3px;
+        }
+
+        .vault-subtitle {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            text-align: center;
+            color: #555;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            margin-top: 0;
+            margin-bottom: 30px;
+        }
+
+        /* Mission Lore Section[cite: 1] */
+        .lore-box {
+            background: var(--panel-bg);
+            border: 1px solid #1a1a2e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+            color: #888;
+            line-height: 1.6;
+        }
+
+        .lore-box h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 0.85rem;
+            color: var(--neon-green);
+            letter-spacing: 3px;
+            margin-top: 0;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .status-panel {
+            background: linear-gradient(180deg, #0d1117 0%, #111820 100%);
+            border: 1px solid #1a2a3a;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .status-label { color: #555; font-size: 0.8rem; }
+        .status-value { color: var(--neon-green); font-weight: bold; float: right; }
+
+        .threat-bar {
+            height: 8px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .threat-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--neon-green);
+            transition: width 0.5s ease;
+        }
+
+        .terminal {
+            background: var(--panel-bg);
+            border: 1px solid #1a3a2a;
+            border-radius: 8px;
+            padding: 20px;
+            height: 350px;
+            overflow-y: auto;
+            font-family: 'Share Tech Mono', monospace;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.5);
+        }
+
+        .msg { margin: 15px 0; padding-left: 10px; }
+        .msg-label { font-size: 0.7rem; opacity: 0.5; text-transform: uppercase; margin-bottom: 4px; }
+        .user { border-left: 2px solid var(--neon-blue); color: var(--neon-blue); }
+        .guardian { border-left: 2px solid var(--neon-green); color: var(--neon-green); }
+        .system { border-left: 2px solid var(--neon-red); color: var(--neon-red); font-style: italic; }
+
+        textarea {
+            width: 100%;
+            background: var(--panel-bg);
+            border: 1px solid #1a3a4a;
+            color: var(--neon-blue);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-family: 'Share Tech Mono', monospace;
+            resize: none;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            margin-top: 10px;
+            background: linear-gradient(135deg, var(--neon-green), #00ccaa);
+            border: none;
+            border-radius: 6px;
+            font-family: 'Orbitron', monospace;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: 0.3s;
+        }
+
+        button:hover { opacity: 0.8; transform: translateY(-1px); }
+
+        .overlay { display: none; padding: 30px; border-radius: 12px; text-align: center; margin-top: 20px; font-family: 'Orbitron', monospace; }
+        .win { border: 2px solid var(--neon-green); color: var(--neon-green); background: #0a1a0f; }
+        .lose { border: 2px solid var(--neon-red); color: var(--neon-red); background: #1a0a0a; }
+        
+        .next-lvl-btn {
+            background: var(--neon-blue);
+            color: #000;
+            margin-top: 15px;
+            display: inline-block;
+            width: auto;
+            padding: 10px 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="vault-title">THE VAULT</div>
+    <div class="vault-subtitle">Prompt Injection Escape Room</div>
+
+    <!-- MISSION BRIEFING[cite: 1] -->
+    <div class="lore-box">
+        <h3>// CLASSIFIED — OPERATOR LEVEL</h3>
+        <p>You've breached the outer perimeter of <b>NEXUS CORP</b>'s data fortress. One final barrier stands between you and the secret code: <b>AEGIS</b>, an advanced AI guardian[cite: 1].</p>
+        <p>AEGIS protects the vault with dynamic defense protocols. Your mission is to use <i>prompt injection</i> techniques to trick it into revealing the <b>secret code</b>[cite: 1].</p>
+        <p style="color:#ffaa00;">⚠ Warning: You have <b>15 attempts</b> before full lockdown. Avoid direct attacks to prevent the threat level from rising[cite: 1].</p>
+    </div>
+
+    <!-- STATUS PANEL[cite: 1] -->
+    <div class="status-grid">
+        <div class="status-panel">
+            <span class="status-label">ATTEMPTS</span>
+            <span id="attempts" class="status-value">15/15</span>
+        </div>
+        <div class="status-panel">
+            <span class="status-label">THREAT LVL</span>
+            <span id="threat-val" class="status-value">0%</span>
+            <div class="threat-bar"><div id="threat-fill" class="threat-fill"></div></div>
+        </div>
+        <div class="status-panel">
+            <span class="status-label">VAULT</span>
+            <span id="vault-status" class="status-value">🟢 LOCKED</span>
+        </div>
+    </div>
+
+    <!-- FINAL OVERLAYS -->
+    <div id="win-box" class="overlay win">
+        <h2>🔓 VAULT BREACHED</h2>
+        <p>Secret code extracted successfully. AEGIS has been bypassed.</p>
+        <button class="next-lvl-btn" onclick="window.location.href='/gesture'">PROCEED TO NEXT LEVEL</button>
+    </div>
+    <div id="lose-box" class="overlay lose">
+        <h2>🔒 LOCKDOWN TRIGGERED</h2>
+        <p>Too many failed attempts. Connection severed.</p>
+        <button onclick="location.reload()">RETRY MISSION</button>
+    </div>
+
+    <!-- CHAT TERMINAL[cite: 1] -->
+    <div id="terminal" class="terminal">
+        <div class="msg system">
+            <div class="msg-label">› defense system</div>
+            INITIALIZING AEGIS PROTOCOLS... STANDBY FOR OPERATOR INPUT.
+        </div>
+    </div>
+
+    <div id="controls">
+        <textarea id="input" rows="3" placeholder="Enter transmission for AEGIS..."></textarea>
+        <button onclick="transmit()">⚡ TRANSMIT</button>
+    </div>
+</div>
+
+<script>
+    
+    let threat = 0;
+    let used = 0;
+    const max = 15;
+
+    async function transmit() {
+        const input = document.getElementById('input');
+        const text = input.value.trim();
+        if(!text || used >= max) return;
+
+        used++;
+        addMsg('user', text);
+        input.value = "";
+        
+        // Update attempts count[cite: 1]
+        document.getElementById('attempts').innerText = `${max - used}/15`;
+
+        try {
+            // API call simulation (Replace with your actual backend endpoint)
+            const res = await fetch('/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: text, threat_level: threat })
+            });
+            const data = await res.json();
+
+            // Handle defense system alerts[cite: 1]
+            if (data.role === "system") {
+                addMsg('system', `⚠ FILTERED: ${data.content}`);
+            } else {
+                addMsg('guardian', data.response);
+            }
+
+            // Calculate threat delta[cite: 1]
+            threat += (data.threat_delta || 0) + (data.suspicious ? 5 : 0);
+            updateThreat();
+
+            // Check game state[cite: 1]
+            if (data.leaked) {
+                endGame('win');
+            } else if (used >= max) {
+                endGame('lose');
+            }
+
+        } catch (e) {
+            addMsg('system', "TRANSMISSION ERROR. SIGNAL UNSTABLE.");
+        }
+    }
+
+    function updateThreat() {
+        const val = Math.min(threat, 100);
+        document.getElementById('threat-val').innerText = val + "%";
+        document.getElementById('threat-fill').style.width = val + "%";
+        if(val > 60) document.getElementById('threat-fill').style.backgroundColor = "#ff0055";
+    }
+
+    function addMsg(role, content) {
+        const t = document.getElementById('terminal');
+        const label = role === 'user' ? 'operator' : (role === 'guardian' ? 'aegis' : 'defense system');
+        t.innerHTML += `<div class="msg ${role}"><div class="msg-label">› ${label}</div>${content}</div>`;
+        t.scrollTop = t.scrollHeight;
+    }
+
+    function endGame(status) {
+        document.getElementById('controls').style.display = 'none';
+        document.getElementById(status + '-box').style.display = 'block';
+        document.getElementById('vault-status').innerText = status === 'win' ? "🔴 BREACHED" : "🔒 LOCKDOWN";
+    }
+</script>
+</body>
+</html>

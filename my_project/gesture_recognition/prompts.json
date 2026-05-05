@@ -1,0 +1,34 @@
+{
+  "0": {
+    "label": "Unknown",
+    "positive_prompt": "abstract holographic robotic hand, floating neutral hand pose, futuristic blue energy glow, sci-fi interface style, metallic details, centered composition, isolated on transparent background"
+  },
+  "1": {
+    "label": "Closed_Fist",
+    "positive_prompt": "powerful mech robot fist, armored mechanical hand, clenched metal fingers, battle-ready pose, detailed pistons and joints, dramatic lighting, centered composition, isolated on transparent background"
+  },
+  "2": {
+    "label": "Open_Palm",
+    "positive_prompt": "friendly cartoon hand, open palm facing forward, colorful animated style, smooth outlines, cheerful appearance, soft shading, centered composition, isolated on transparent background"
+  },
+  "3": {
+    "label": "Pointing_Up",
+    "positive_prompt": "sleek futuristic android hand pointing upward, polished white and silver panels, glowing blue accents, elegant sci-fi design, studio lighting, centered composition, isolated on transparent background"
+  },
+  "4": {
+    "label": "Thumb_Down",
+    "positive_prompt": "stylized comic book hand giving thumbs down, bold outlines, dynamic shading, expressive pose, vibrant colors, pop art aesthetic, centered composition, isolated on transparent background"
+  },
+  "5": {
+    "label": "Thumb_Up",
+    "positive_prompt": "cute 3D robot hand giving thumbs up, glossy plastic and metallic materials, friendly mascot design, soft studio lighting, polished render, centered composition, isolated on transparent background"
+  },
+  "6": {
+    "label": "Victory",
+    "positive_prompt": "anime-style cybernetic hand making peace sign, neon accents, sleek metallic fingers, vibrant cel shading, futuristic Japanese aesthetic, centered composition, isolated on transparent background"
+  },
+  "7": {
+    "label": "ILoveYou",
+    "positive_prompt": "pixar-style robotic hand making I love you gesture, rounded mechanical fingers, expressive friendly design, colorful 3D animation style, soft global illumination, centered composition, isolated on transparent background"
+  }
+}
