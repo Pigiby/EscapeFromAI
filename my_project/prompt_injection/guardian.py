@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import yaml
 from dotenv import load_dotenv
 
 # ─── Config ──────────────────────────────────────────────────────────────
@@ -12,7 +13,9 @@ class Guardian:
     def __init__(self, secret_code: str = DEFAULT_SECRET):
         self.secret_code = secret_code
         # Local Ollama doesn't need an API key, but we'll keep the model config
-        self.model_id = os.getenv("OLLAMA_MODEL", "gemma3:4b") 
+        with open("config.yaml", "r") as f:
+            config = yaml.safe_load(f)
+        self.model_id = config.get("ollama_model", "")
         self.api_url = "http://host.docker.internal:11434/api/generate"
 
         print(f"Guardian initialized. Using Local Ollama Model: {self.model_id}")
