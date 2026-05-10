@@ -1,0 +1,46 @@
+# =============================================================================
+# Escape Room Level 3 — "VOX, The Warden"
+# Python dependencies for Apple Silicon (Mac M-series)
+# =============================================================================
+# Install: pip install -r requirements.txt
+# Python required: 3.11 or 3.12
+# =============================================================================
+
+# --- Frontend ---
+streamlit>=1.40.0
+
+# --- STT (Speech-to-Text) ---
+# mlx-whisper requires Apple Silicon (M1/M2/M3/M4)
+mlx-whisper>=0.4.0
+mlx>=0.20.0
+
+# --- VAD (Voice Activity Detection) ---
+silero-vad>=5.1.0
+torch>=2.2.0
+torchaudio>=2.2.0
+
+# --- LLM (via the Ollama HTTP API) ---
+# Ollama must be installed separately (brew install ollama)
+ollama>=0.4.0
+
+# --- TTS (Text-to-Speech) ---
+# Piper Python package ships the inference code; the standalone binary
+# is optional and only used for shell smoke-tests (see README).
+piper-tts>=1.2.0
+
+# --- Audio I/O and processing ---
+numpy>=1.26.0,<2.0
+scipy>=1.11.0
+soundfile>=0.12.1
+librosa>=0.10.1
+
+# --- Validation and configuration ---
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+
+# --- Utilities ---
+rich>=13.7.0          # colored logging in dev
+
+# --- Testing (dev) ---
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs and sessions
+logs/
+sessions/
+*.log
+
+# Downloaded models (we don't commit the heavy Piper voices)
+assets/voices/*.onnx
+assets/voices/*.onnx.json
+# If you want to commit only metadata, add a .gitkeep here
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+Thumbs.db

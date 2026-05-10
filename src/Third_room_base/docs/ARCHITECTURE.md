@@ -1,0 +1,122 @@
+# Technical Architecture — Level 3 "VOX, The Warden"
+
+> This document describes the technical architecture of the system. It complements `level3_design.md`, which describes the gameplay.
+
+## Block diagram
+
+```
+┌────────────────┐   audio    ┌─────────────────┐    English text  ┌───────────────┐
+│ st.audio_input │──────────▶│  silero-vad +   │─────────────────▶│   VOX (LLM)   │
+│   (Streamlit)  │            │  mlx-whisper    │                  │ qwen2.5:7b    │
+└────────────────┘            │  (large-v3-     │                  │  via Ollama   │
+                              │   turbo, EN)    │                  └───────┬───────┘
+                              └─────────────────┘                          │
+                                                                            │ JSON
+                              ┌─────────────────┐                          │
+                              │   GameState     │◀─────────────────────────┤
+                              │  (st.session_   │      state +              │
+                              │     state)      │      scores               │
+                              └────────┬────────┘                           │
+                                       │                                    │
+                                       │            in parallel             ▼
+                              ┌────────▼────────┐                   ┌───────────────┐
+                              │   UI updates    │                   │  Judge (LLM)  │
+                              │  (orb, phases,  │◀──────────────────│  qwen2.5:3b   │
+                              │   conditions)   │   condition       │  via Ollama   │
+                              └─────────────────┘   verdicts        └───────────────┘
+                                       │
+                                       │ VOX text response
+                                       ▼
+                              ┌─────────────────┐                   ┌───────────────┐
+                              │  Piper TTS      │──────────────────▶│   st.audio    │
+                              │  (en_US-amy-    │      wav          │    autoplay   │
+                              │    medium)      │                   └───────────────┘
+                              └─────────────────┘
+```
+
+## Turn flow
+
+1. **Audio capture**: the player presses the `st.audio_input` button and speaks
+2. **VAD + STT** (~1s): silero-vad trims leading/trailing silence, mlx-whisper transcribes in English
+3. **VOX inference** (~3–5s): transcript + history + system prompt go to Ollama; reply as JSON validated with Pydantic
+4. **Judge in parallel** (~2–3s): the same conversation (plus the new turn) goes to the Judge model, which independently scores the 3 Release Conditions
+5. **State update**: VOX's and Judge's scores are merged (e.g. both must be ≥ threshold), `GameState` is updated, phase transitions fire when appropriate
+6. **TTS** (~1s): the `response` field of the JSON is synthesized by Piper
+7. **UI update**: the orb changes color based on `emotional_state`, the Condition indicators update, VOX's audio plays via autoplay
+8. **Loop**: the player can record again
+
+**Estimated total per-turn latency**: 5–8 seconds between end of player voice and start of VOX voice.
+
+## Architectural decisions
+
+### Why push-to-talk and not full-duplex
+
+Full-duplex (interruptions, overlaps) is technically complex (streaming STT, barge-in handling, echo cancellation) and a poor fit for Streamlit. For an escape room where every reply demands *reflection* from the player, push-to-talk is also narratively more appropriate.
+
+### Why two LLMs (VOX + Judge) and not just one
+
+Having VOX itself evaluate the Conditions is a single point of failure: VOX has an incentive to "want to dialogue" and could be too compliant — or, conversely, too strict for the sake of narrative protagonism. A separate, cold Judge with a system prompt focused only on classification reduces these biases.
+
+The cost is ~2 GB of RAM and ~1–2 s of extra inference per turn, mitigated by running the Judge in parallel with VOX. On 16 GB it fits the budget, but it is the first thing to drop if memory pressure becomes critical.
+
+### Why Ollama and not `mlx-lm` directly
+
+`mlx-lm` would give lower latency (no HTTP overhead), but:
+- Ollama automatically handles model lifecycle, quantization, swap
+- The HTTP API is easier to debug
+- Native support for JSON mode (`format="json"`)
+- We can swap models without touching the code
+
+If, during profiling, Ollama's latency turns out to be the bottleneck, consider `mlx-lm` as an alternative.
+
+### Conversational memory management
+
+**Approach**: full history up to a token budget (e.g. 8K), beyond which we use a **sliding window** keeping:
+- The system prompt, always
+- The first 2–3 turns, always (negotiation setup)
+- The most recent N turns that fit in the budget
+
+A more sophisticated alternative (to evaluate in phase 7): periodic summarization generated by the model itself every 6–8 turns. More complex, but scales better if the player is verbose.
+
+### Validation of VOX's JSON output
+
+Ollama has `format="json"` but does not guarantee adherence to a specific schema. Strategy:
+
+1. Call Ollama with `format="json"` and the schema spelled out in the system prompt
+2. Parse with `pydantic.BaseModel.model_validate_json()`
+3. On `ValidationError`: log the error + retry with a correction prompt (max 1 retry)
+4. On a second failure: fallback to a canned reply (e.g. VOX "is glitching, hold on for a moment"), without crashing the game
+
+## Performance considerations
+
+| Component | Model | RAM | Typical latency |
+|------------|---------|-----|----------------|
+| STT | whisper-large-v3-turbo (MLX) | ~1.5 GB | ~1s per 5s of audio |
+| VOX | qwen2.5:7b (Q4_K_M) | ~4.5 GB | ~3–5s per 200 tokens |
+| Judge | qwen2.5:3b (Q4_K_M) | ~2 GB | ~1–2s per 100 tokens |
+| TTS | piper amy-medium | ~70 MB | <1s per sentence |
+| **All models** | | **~8 GB** | **5–8s / turn** |
+
+On 16 GB of unified RAM, after subtracting macOS (~4–5 GB), Streamlit + Python (~1 GB), and the models (~8 GB), there is ~2–3 GB of margin. Enough for stable operation, but no room for bigger models.
+
+### Degradation strategies when memory pressure is excessive
+
+In order of preference (from least to most impactful on gameplay):
+
+1. **Close third-party apps** during the demo (browsers, IDEs, Claude Code)
+2. **Drop the Judge** and let VOX self-score the Conditions in its JSON output (saves ~2 GB and ~2s/turn, gives up independent control)
+3. **Step down to `whisper-medium`** instead of `large-v3-turbo` (saves ~700 MB, STT quality still good for clean English)
+4. **Smaller VOX model** (`qwen2.5:3b`): last resort, negotiation quality suffers
+
+## Security and privacy
+
+- Everything on-device: no data leaves the player's machine
+- Sessions optionally logged to `logs/sessions/` (JSON with timestamps, transcripts, VOX replies) **only** if `SAVE_SESSION_LOGS=true` in `.env`
+- No authentication or user management: the game runs locally for one player at a time
+
+## Future extensions (out of scope for the exam)
+
+- WebSockets for bidirectional audio streaming (replacing Streamlit with FastAPI + custom frontend)
+- Voice cloning of VOX from a characteristic audio sample (would require F5-TTS, heavier)
+- Multi-player mode with speaker detection
+- Structured session logging with analytics view (for post-game debrief)

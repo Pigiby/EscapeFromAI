@@ -1,143 +1,144 @@
-# CLAUDE.md — Escape Room, Livello 3 "Il Custode"
+# CLAUDE.md — Escape Room, Level 3 "VOX, The Warden"
 
-Questo file è letto automaticamente da Claude Code a ogni sessione. Contiene il contratto del progetto: stack, vincoli, convenzioni e workflow. **Leggilo sempre prima di scrivere o modificare codice.**
+This file is read automatically by Claude Code at every session. It is the project contract: stack, constraints, conventions, and workflow. **Read it before writing or modifying code.**
 
-## Contesto del progetto
+## Project context
 
-Progetto universitario di Generative AI. Escape room a 3 livelli, ogni livello dimostra una modalità diversa di interazione con l'AI generativa.
+University project for a Generative AI course. A three-level escape room, each level demonstrating a different mode of interaction with generative AI.
 
-- **Livello 1** (già implementato dal team): jailbreak testuale di un LLM
-- **Livello 2** (già implementato dal compagno): riconoscimento e replica di sequenze di simboli via webcam
-- **Livello 3** (questo repo): negoziazione vocale con un'IA carceriera ("VOX")
+- **Level 1** (already implemented by another team member): textual jailbreak of an LLM
+- **Level 2** (already implemented by another team member): recognition and replay of symbol sequences via webcam
+- **Level 3** (this repo): voice negotiation with an AI warden ("VOX")
 
-Questo livello deve dialogare narrativamente col primo: VOX riconosce e respinge i tentativi di jailbreak testuale, perché è "l'evoluzione" dell'LLM ingenuo del livello 1.
+This level dialogues narratively with Level 1: VOX recognizes and rejects the textual jailbreak attempts the player learned earlier, because VOX is "the evolution" of the naive LLM from Level 1.
 
-Il design completo del gioco è in `docs/level3_design.md`. Il brief originale è in `docs/level3_brief.md`. **Consultali quando devi prendere decisioni di gameplay o di personalità di VOX.**
+The full game design lives in `docs/level3_design.md`. The original brief is in `docs/level3_brief.md`. **Consult them when making gameplay or VOX-personality decisions.**
 
-## Hardware target e vincoli
+## Target hardware and constraints
 
-- **Macchina di sviluppo e demo**: MacBook Pro Apple Silicon con **16GB** di RAM unificata
-- **Tutto deve girare 100% in locale**, senza chiamate a servizi cloud
-- **Solo modelli e librerie open source** con licenze permissive (MIT, Apache 2.0). Da evitare: Llama 3.1+ (Llama Community License non è open source pura nel senso stretto), XTTS-v2 (Coqui Public Model License con restrizioni)
-- **Lingua dell'interazione**: italiano
+- **Development and demo machine**: MacBook Pro Apple Silicon with **16 GB** of unified RAM
+- **Everything must run 100% locally**, with no cloud service calls
+- **Only open-source models and libraries** under permissive licenses (MIT, Apache 2.0). Avoid: Llama 3.1+ (Llama Community License is not strictly open source), XTTS-v2 (Coqui Public Model License has restrictions)
+- **Interaction language**: English (player speaks English, VOX speaks English)
 
-### Vincoli di memoria specifici
+### Memory budget
 
-I 16GB di RAM unificata sono il vincolo *operativo* più importante. Il budget approssimativo:
+16 GB of unified RAM is the *operational* constraint that drives everything. Rough budget:
 
-| Componente | RAM |
+| Component | RAM |
 |------------|-----|
-| Whisper turbo | ~1.5 GB |
-| VOX (Qwen 7B Q4) | ~4.5 GB |
-| Judge (Qwen 3B Q4) | ~2 GB |
+| Whisper large-v3-turbo (MLX) | ~1.5 GB |
+| VOX (Qwen 2.5 7B, Q4) | ~4.5 GB |
+| Judge (Qwen 2.5 3B, Q4) | ~2 GB |
 | Piper TTS | ~0.1 GB |
 | Streamlit + Python | ~1 GB |
-| macOS + altro | ~4-5 GB |
-| **Margine** | **~2-3 GB** |
+| macOS + everything else | ~4–5 GB |
+| **Margin** | **~2–3 GB** |
 
-**Implicazioni pratiche**:
-- NON aggiungere altri modelli AI senza rimuoverne uno
-- Durante test e demo, chiudere browser pesanti, Claude Code, IDE non necessari
-- Se la pressione di memoria diventa un problema (verifica con `vm_stat` o Activity Monitor), il primo intervento è disattivare il Judge e far auto-valutare le Condizioni a VOX nel suo JSON output
+**Practical implications**:
+- Do NOT add another AI model without removing one
+- During tests and demo, close heavy browsers, Claude Code, unneeded IDEs
+- If memory pressure becomes a problem (check with `vm_stat` or Activity Monitor), the first mitigation is to disable the Judge and let VOX self-score the Release Conditions in its JSON output
 
-## Stack tecnico (NON cambiare senza motivo esplicito)
+## Tech stack (do NOT change without an explicit reason)
 
-### Pipeline AI
-- **STT**: `mlx-whisper` con modello `mlx-community/whisper-large-v3-turbo` (MIT, ottimizzato per Apple Silicon, near-realtime)
-- **VAD**: `silero-vad` per detection automatica di fine turno
-- **LLM (VOX)**: `Ollama` con `qwen2.5:7b-instruct` (Apache 2.0). NON salire a 14B su 16GB di RAM, va in pressione di memoria
-- **LLM (Judge)**: `qwen2.5:3b-instruct` via Ollama, in parallelo a VOX. Modello piccolo perché il task di classificazione non richiede di più, e dobbiamo rispettare il budget di RAM
-- **TTS**: `piper-tts` con voce italiana `it_IT-paola-medium` (MIT)
+### AI pipeline
+- **STT**: `mlx-whisper` with `mlx-community/whisper-large-v3-turbo` (MIT, Apple Silicon optimized, near-realtime)
+- **VAD**: `silero-vad` for trimming leading/trailing silence in the recorded audio blob (turn end is decided by the user clicking *stop*, not by VAD)
+- **LLM (VOX)**: `Ollama` with `qwen2.5:7b-instruct` (Apache 2.0). Do NOT scale up to 14B on 16 GB of RAM — it causes memory pressure
+- **LLM (Judge)**: `qwen2.5:3b-instruct` via Ollama, in parallel with VOX. Small model because the classification task does not need more, and we must respect the RAM budget
+- **TTS**: `piper-tts` with the English voice `en_US-amy-medium` (MIT)
 
 ### Frontend
-- **Streamlit** (versione recente, >= 1.40) come framework UI
-- `st.audio_input` per push-to-talk del giocatore
-- `st.audio` con `autoplay=True` per riproduzione voce di VOX
-- `st.components.v1.html` per la "presenza visiva" di VOX (orb pulsante HTML/CSS)
-- `st.session_state` per state management (Streamlit ri-esegue lo script a ogni interazione)
+- **Streamlit** (recent, >= 1.40) as the UI framework
+- `st.audio_input` for player push-to-talk
+- `st.audio` with `autoplay=True` for VOX's voice playback
+- `st.components.v1.html` for VOX's "visual presence" (HTML/CSS pulsing orb)
+- `st.session_state` for state management (Streamlit re-runs the script on every interaction)
 
-### Linguaggio e librerie generali
-- **Python 3.11 o 3.12** (NON 3.13: alcune dipendenze ML non sono ancora pronte al 100%)
-- Gestione dipendenze con `pip` + `requirements.txt` (no Poetry, no uv per coerenza con il resto del progetto)
-- Validazione output strutturati: `pydantic` v2
+### Language and general libraries
+- **Python 3.11 or 3.12** (NOT 3.13: some ML dependencies are not fully ready yet)
+- Dependency management with `pip` + `requirements.txt` (no Poetry, no uv — consistent with the rest of the project)
+- Structured-output validation: `pydantic` v2
 - Audio I/O: `soundfile`, `numpy`
 
-## Struttura del progetto
+## Project structure
 
 ```
-escape-room-livello-3/
-├── app.py                       # Entry point Streamlit
+escape-room-level-3/
+├── app.py                       # Streamlit entry point
 ├── core/
 │   ├── __init__.py
-│   ├── stt.py                   # Wrapper mlx-whisper + silero-vad
-│   ├── llm.py                   # Wrapper Ollama per VOX
-│   ├── judge.py                 # LLM giudice per le 3 Condizioni
-│   ├── tts.py                   # Wrapper Piper
-│   ├── state.py                 # GameState, fasi, punteggi
-│   └── audio_utils.py           # Conversioni audio, normalizzazione
+│   ├── stt.py                   # mlx-whisper + silero-vad wrapper
+│   ├── llm.py                   # Ollama wrapper for VOX
+│   ├── judge.py                 # Judge LLM for the 3 Release Conditions
+│   ├── tts.py                   # Piper wrapper
+│   ├── state.py                 # GameState, phases, scores
+│   └── audio_utils.py           # Audio conversions, normalization
 ├── prompts/
-│   ├── vox_system.md            # System prompt di VOX (personalità + stato)
-│   └── judge_system.md          # System prompt del giudice
+│   ├── vox_system.md            # VOX system prompt (personality + state)
+│   └── judge_system.md          # Judge system prompt
 ├── ui/
-│   ├── orb.html                 # Componente onda/orb pulsante
-│   └── styles.css               # Stili custom
+│   ├── orb.html                 # Pulsing orb component
+│   └── styles.css               # Custom styles
 ├── assets/
-│   ├── ambient/                 # Drone di sottofondo (file .ogg/.mp3)
-│   └── samples/                 # Audio di test per sviluppo
+│   ├── voices/                  # Piper voice files (.onnx + .onnx.json)
+│   ├── ambient/                 # Ambient drone (.ogg/.mp3)
+│   └── samples/                 # Audio samples for development
 ├── docs/
-│   ├── level3_brief.md          # Brief originale del livello
-│   ├── level3_design.md         # Documento di design completo
-│   └── ARCHITECTURE.md          # Architettura tecnica
+│   ├── level3_brief.md          # Original level brief
+│   ├── level3_design.md         # Full game design
+│   └── ARCHITECTURE.md          # Technical architecture
 ├── tests/
 │   ├── test_stt.py
 │   ├── test_llm.py
 │   └── test_state.py
-├── CLAUDE.md                    # Questo file
+├── CLAUDE.md                    # This file
 ├── requirements.txt
 ├── .env.example
 └── README.md
 ```
 
-## Convenzioni di codice
+## Coding conventions
 
-- **Type hints obbligatori** su funzioni pubbliche e classi. Usa `from __future__ import annotations` in cima ai file
-- **Docstring stile Google** per funzioni pubbliche (cosa fa, args, returns, raises)
-- **Nomi in inglese** per codice e variabili. **Stringhe utente in italiano** (è un gioco italiano)
-- **Logging** via modulo standard `logging`, non `print`. Configura un logger per modulo (`logger = logging.getLogger(__name__)`)
-- **No I/O bloccante nel main thread di Streamlit**: usa `st.cache_resource` per modelli pesanti (Whisper, client Ollama, Piper) così sono caricati una sola volta
-- **Tutti i path** gestiti con `pathlib.Path`, mai stringhe
-- **Configurazione** via variabili d'ambiente (`.env` con `python-dotenv`), valori di default nel codice. Vedi `.env.example`
+- **Type hints required** on public functions and classes. Use `from __future__ import annotations` at the top of files
+- **Google-style docstrings** for public functions (what it does, args, returns, raises)
+- **English** for code and identifiers. **User-facing strings also in English** (this is the English version of the game)
+- **Logging** via the standard `logging` module, not `print`. Configure a logger per module (`logger = logging.getLogger(__name__)`)
+- **No blocking I/O on Streamlit's main thread**: use `st.cache_resource` for heavy models (Whisper, Ollama client, Piper) so they load once
+- **All paths** managed with `pathlib.Path`, never strings
+- **Configuration** via environment variables (`.env` with `python-dotenv`), defaults in code. See `.env.example`
 
-## Pattern architetturali da seguire
+## Architectural patterns to follow
 
-### Interfacce astratte per STT, LLM, TTS
-Ogni modulo in `core/` espone una classe con interfaccia stabile, così possiamo cambiare modello/libreria senza toccare il resto. Esempio per TTS:
+### Abstract interfaces for STT, LLM, TTS
+Each module in `core/` exposes a class with a stable interface, so we can swap model/library without touching the rest. Example for TTS:
 
 ```python
 class TTSEngine(Protocol):
     def synthesize(self, text: str) -> bytes: ...
 ```
 
-Con implementazioni `PiperTTS`, eventualmente `KokoroTTS` ecc.
+With implementations like `PiperTTS`, possibly `KokoroTTS`, etc.
 
-### Output strutturato di VOX
-VOX deve rispondere SEMPRE in JSON valido con questo schema (validato con Pydantic):
+### Structured output from VOX
+VOX must ALWAYS reply in valid JSON with this schema (validated with Pydantic):
 
 ```python
 class VoxResponse(BaseModel):
-    risposta: str                    # quello che dirà ad alta voce
-    stato_emotivo: Literal["neutrale", "interessato", "irritato", "persuaso"]
-    punteggi_condizioni: dict[str, int]   # 3 chiavi, valori 0-100
-    note_interne: str                # ragionamento nascosto al giocatore (utile per debug e judge)
+    response: str                     # what VOX will say out loud
+    emotional_state: Literal["neutral", "interested", "irritated", "persuaded"]
+    condition_scores: dict[str, int]  # 3 keys, values 0–100
+    internal_notes: str               # hidden reasoning, not shown to the player (useful for debug + judge)
 ```
 
-Configura Ollama con `format="json"` e usa Pydantic per parsing + retry su errori di parsing.
+Configure Ollama with `format="json"` and use Pydantic for parsing + retry on parse errors.
 
-### State management Streamlit
-Tutto lo stato del gioco vive in `st.session_state.game_state`, un'istanza di `GameState` (dataclass o Pydantic model). NON spargere stato in variabili globali del modulo.
+### Streamlit state management
+All game state lives in `st.session_state.game_state`, an instance of `GameState` (dataclass or Pydantic model). Do NOT scatter state in module-level globals.
 
-### Caricamento modelli
-Tutti i modelli pesanti caricati con `@st.cache_resource` per evitare reload a ogni rerun. Es:
+### Model loading
+All heavy models loaded via `@st.cache_resource` to avoid reloading on each rerun. Example:
 
 ```python
 @st.cache_resource
@@ -145,70 +146,70 @@ def get_whisper_model():
     return load_whisper("mlx-community/whisper-large-v3-turbo")
 ```
 
-## Cose da NON fare
+## Things NOT to do
 
-- ❌ Non chiamare API cloud (OpenAI, Anthropic, ElevenLabs, ecc.). Tutto locale, sempre
-- ❌ Non usare modelli con licenze restrittive (Llama, XTTS-v2)
-- ❌ Non scrivere codice "tutto in un colpo": un task = uno slice verticale testabile
-- ❌ Non aggiungere dipendenze non strettamente necessarie. Prima di aggiungere una libreria al `requirements.txt`, motiva
-- ❌ Non usare `print()` per debug: usa `logging`
-- ❌ Non hardcodare path assoluti, usa `pathlib.Path` relativi alla root del progetto
-- ❌ Non bypassare la validazione Pydantic dell'output di VOX: se il JSON non è valido, fai retry con prompt che chiede esplicitamente di correggere
-- ❌ Non implementare full-duplex audio. Il design è push-to-talk a turni, è una scelta consapevole
+- ❌ Do NOT call cloud APIs (OpenAI, Anthropic, ElevenLabs, etc.). Everything local, always
+- ❌ Do NOT use models with restrictive licenses (Llama, XTTS-v2)
+- ❌ Do NOT write code "all at once": one task = one vertical, testable slice
+- ❌ Do NOT add dependencies that aren't strictly necessary. Before adding a library to `requirements.txt`, justify it
+- ❌ Do NOT use `print()` for debugging: use `logging`
+- ❌ Do NOT hardcode absolute paths; use `pathlib.Path` relative to the project root
+- ❌ Do NOT bypass Pydantic validation of VOX's output: if the JSON is invalid, retry with a prompt explicitly asking for correction
+- ❌ Do NOT implement full-duplex audio. The design is turn-based push-to-talk, this is a conscious choice
 
-## Workflow di sviluppo (slice verticali)
+## Development workflow (vertical slices)
 
-Procedi UNO slice alla volta. Ogni slice deve produrre qualcosa di testabile end-to-end.
+Proceed ONE slice at a time. Each slice must produce something testable end-to-end.
 
-1. **Setup**: skeleton, `requirements.txt`, app Streamlit "hello world"
-2. **STT only**: registra audio, trascrivi, mostra testo
-3. **LLM text only**: aggiungi Ollama, system prompt minimale di VOX, mostra risposta come testo
-4. **TTS**: la risposta di VOX viene letta a voce
-5. **Visual presence**: orb pulsante in HTML/CSS, stato di colore
-6. **System prompt completo + stato**: VOX con personalità, output JSON con stato emotivo e punteggi
-7. **Judge LLM**: secondo modello in parallelo per valutare le 3 Condizioni
-8. **Fasi e progressione**: gestione delle 3 fasi, transizioni, indicatori delle Condizioni
-9. **Logica errori**: rilevamento jailbreak, insulti, silenzi, penalità diegetiche
-10. **Atmosfera + polish**: drone ambient, animazioni, accessibilità (trascrizione opzionale)
+1. **Setup**: skeleton, `requirements.txt`, Streamlit "hello world"
+2. **STT only**: record audio, transcribe, show text
+3. **LLM text only**: add Ollama, minimal VOX system prompt, show reply as text
+4. **TTS**: VOX's reply is spoken aloud
+5. **Visual presence**: pulsing HTML/CSS orb, color states
+6. **Full system prompt + state**: VOX with personality, JSON output with emotional state and scores
+7. **Judge LLM**: second model running in parallel to evaluate the 3 Release Conditions
+8. **Phases and progression**: management of the 3 phases, transitions, Condition indicators
+9. **Error logic**: jailbreak detection, insults, silences, diegetic penalties
+10. **Atmosphere + polish**: ambient drone, animations, accessibility (optional transcription)
 
-A fine di ogni slice: testa manualmente la nuova funzionalità, fai un commit con messaggio descrittivo (`feat(stt): trascrizione base con whisper-large-v3-turbo`), poi passa al successivo.
+At the end of each slice: manually test the new feature, commit with a descriptive message (`feat(stt): basic transcription with whisper-large-v3-turbo`), then move to the next.
 
 ## Testing
 
-- Test unitari in `tests/` con `pytest`
-- Per i moduli che usano modelli pesanti, usa fixture con mock o usa modelli minimi (es. `whisper-tiny`) nei test
-- Almeno: test di parsing dell'output JSON di VOX, test di transizione di stato del `GameState`, test di rilevamento di tentativi di jailbreak banali
+- Unit tests in `tests/` with `pytest`
+- For modules using heavy models, use fixtures with mocks or use minimal models (e.g. `whisper-tiny`) in tests
+- At a minimum: tests for parsing of VOX's JSON output, `GameState` transitions, and detection of trivial jailbreak attempts
 
-## Comandi utili
+## Useful commands
 
 ```bash
-# Setup iniziale
+# Initial setup
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Installazione Ollama (se non già installato)
+# Ollama install (if not already)
 brew install ollama
 ollama serve &
 ollama pull qwen2.5:7b-instruct
 ollama pull qwen2.5:3b-instruct
 
-# Installazione voce Piper italiana
-# (vedi README.md per istruzioni dettagliate)
+# Piper English voice install
+# (see README.md for detailed instructions)
 
-# Avvio app
+# Run the app
 streamlit run app.py
 
-# Test
+# Tests
 pytest tests/ -v
 
-# Monitoraggio memoria (utile durante sviluppo per verificare di stare nei 16GB)
+# Memory monitoring (useful during development to stay within 16 GB)
 top -o MEM
-# oppure Activity Monitor → Memory tab
+# or Activity Monitor → Memory tab
 ```
 
-## Quando in dubbio
+## When in doubt
 
-- Sui contenuti di gameplay (personalità VOX, dialoghi, condizioni di rilascio): consulta `docs/level3_design.md`
-- Sull'architettura: consulta `docs/ARCHITECTURE.md`
-- Su scelte tecniche non documentate: chiedi all'utente prima di procedere, non improvvisare. Meglio una domanda in più che 200 righe da buttare
+- On gameplay content (VOX personality, dialogues, release conditions): consult `docs/level3_design.md`
+- On architecture: consult `docs/ARCHITECTURE.md`
+- On undocumented technical choices: ask the user before proceeding — do not improvise. Better one extra question than 200 lines to throw away

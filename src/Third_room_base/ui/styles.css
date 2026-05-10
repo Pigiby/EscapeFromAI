@@ -1,0 +1,71 @@
+/* Global styles for VOX — dark, sparse, monospace.
+   Loaded into Streamlit via st.markdown(unsafe_allow_html=True) in app.py. */
+
+:root {
+  --vox-bg: #0a0a0c;
+  --vox-fg: #e9eaee;
+  --vox-fg-dim: rgba(233, 234, 238, 0.55);
+  --vox-accent: #6aa6ff;
+}
+
+/* Streamlit chrome: hide menu, footer, and the deploy button. */
+#MainMenu, footer, header { visibility: hidden; }
+[data-testid="stToolbar"] { visibility: hidden; }
+
+/* Page background. */
+.stApp {
+  background: radial-gradient(
+    ellipse at center top,
+    #11131a 0%,
+    var(--vox-bg) 70%
+  );
+  color: var(--vox-fg);
+}
+
+/* Title block. */
+.stApp h1 {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  font-weight: 600;
+  text-align: center;
+  color: var(--vox-fg);
+  text-shadow: 0 0 16px rgba(106, 166, 255, 0.25);
+}
+.stApp [data-testid="stCaptionContainer"] {
+  text-align: center;
+  color: var(--vox-fg-dim);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+/* Body copy and conversation. */
+.stApp p, .stApp li, .stMarkdown {
+  color: var(--vox-fg);
+}
+.stMarkdown strong {
+  color: var(--vox-accent);
+  letter-spacing: 0.05em;
+}
+
+/* Audio input button — tighten and recolor. */
+[data-testid="stAudioInput"] {
+  border: 1px solid rgba(233, 234, 238, 0.12);
+  border-radius: 12px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Subtle scrollbars. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(233, 234, 238, 0.18);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

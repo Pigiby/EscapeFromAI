@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: #e9eaee;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    overflow: hidden;
+  }
+  .orb-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 240px;
+  }
+  .orb {
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle at 35% 30%,
+      var(--orb-primary, #6aa6ff) 0%,
+      var(--orb-deep, #1a3a78) 60%,
+      #0a1530 100%
+    );
+    box-shadow: 0 0 48px 10px var(--orb-halo, rgba(80, 140, 220, 0.4));
+    animation: vox-pulse var(--orb-period, 3s) ease-in-out infinite;
+  }
+  @keyframes vox-pulse {
+    0%, 100% { transform: scale(1.00); opacity: 0.92; }
+    50%      { transform: scale(1.06); opacity: 1.00; }
+  }
+  .orb-state {
+    margin-top: 14px;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(233, 234, 238, 0.55);
+  }
+</style>
+</head>
+<body>
+  <div class="orb-wrap">
+    <div
+      class="orb"
+      style="
+        --orb-primary: {ORB_PRIMARY};
+        --orb-deep:    {ORB_DEEP};
+        --orb-halo:    {ORB_HALO};
+        --orb-period:  {ORB_PERIOD};
+      "
+    ></div>
+    <div class="orb-state">{STATE_LABEL}</div>
+  </div>
+</body>
+</html>

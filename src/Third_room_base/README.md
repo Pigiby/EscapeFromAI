@@ -1,139 +1,140 @@
-# Escape Room — Livello 3: "Il Custode"
+# Escape Room — Level 3: "VOX, The Warden"
 
-Terzo livello di un'escape room basata su Generative AI. Il giocatore deve negoziare vocalmente con un'IA carceriera (VOX) per ottenere il codice di uscita.
+Third level of a Generative-AI-based escape room. The player must negotiate vocally with an AI warden (VOX) to obtain the exit code.
 
 **Stack**: Python 3.12 · Streamlit · MLX-Whisper · Ollama (Qwen 2.5) · Piper TTS
 
-**Target**: macOS Apple Silicon, 16GB RAM (Mac Pro/Air M-series)
+**Target**: macOS Apple Silicon, 16 GB RAM (Mac Pro / Air M-series)
 
 ---
 
 ## Setup
 
-### 1. Prerequisiti di sistema
+### 1. System prerequisites
 
 ```bash
-# Homebrew (se non installato)
+# Homebrew (if not installed)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Python 3.12
 brew install python@3.12
 
-# Ollama (server LLM locale)
+# Ollama (local LLM server)
 brew install ollama
 
-# Piper TTS (binario)
+# Piper TTS — OPTIONAL binary, used for shell smoke-tests only.
+# The Python package `piper-tts` (in requirements.txt) ships the inference code,
+# so the standalone binary is not required to run the app.
 brew install piper-tts
-# In alternativa, scarica il binario da: https://github.com/rhasspy/piper/releases
 
-# Dipendenze audio di sistema
+# System audio dependencies
 brew install portaudio ffmpeg
 ```
 
-### 2. Ambiente Python
+### 2. Python environment
 
 ```bash
-cd escape-room-livello-3
+cd Third_room_base
 
-# Crea virtualenv con Python 3.12
+# Create the virtualenv with Python 3.12
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# Installa dipendenze
+# Install dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 3. Modelli Ollama (LLM)
+### 3. Ollama models (LLMs)
 
 ```bash
-# Avvia il server Ollama in background
+# Start the Ollama server in the background
 ollama serve &
 
-# Scarica i modelli (~4.5GB e ~2GB)
+# Pull the models (~4.5 GB and ~2 GB)
 ollama pull qwen2.5:7b-instruct
 ollama pull qwen2.5:3b-instruct
 
-# Verifica
+# Verify
 ollama list
 ```
 
-### 4. Voce italiana per Piper
+### 4. English voice for Piper
 
 ```bash
 mkdir -p assets/voices
 cd assets/voices
 
-# Voce 'Paola' (medium quality, ~63MB)
-curl -L -O https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/paola/medium/it_IT-paola-medium.onnx
-curl -L -O https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/paola/medium/it_IT-paola-medium.onnx.json
+# 'Amy' voice (medium quality, female US English, ~63 MB)
+curl -L -O https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
+curl -L -O https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
 
 cd ../..
 ```
 
-### 5. Configurazione
+### 5. Configuration
 
 ```bash
 cp .env.example .env
-# Edita .env se vuoi cambiare i default
+# Edit .env if you want to override the defaults
 ```
 
-### 6. Verifica installazione
+### 6. Installation check
 
 ```bash
-# Test rapido di ogni componente
+# Quick smoke test for each component
 python -c "import mlx_whisper; print('mlx-whisper OK')"
 python -c "import ollama; print('ollama OK')"
 python -c "import streamlit; print('streamlit OK')"
 
-# Test Piper
-echo "Ciao, sono il Custode." | piper \
-  --model assets/voices/it_IT-paola-medium.onnx \
+# Piper (only if you installed the binary)
+echo "Hello, I am the Warden." | piper \
+  --model assets/voices/en_US-amy-medium.onnx \
   --output_file /tmp/test_voice.wav
 afplay /tmp/test_voice.wav
 ```
 
 ---
 
-## Esecuzione
+## Running
 
 ```bash
-# Terminale 1: server Ollama
+# Terminal 1: Ollama server
 ollama serve
 
-# Terminale 2: app Streamlit
+# Terminal 2: Streamlit app
 source .venv/bin/activate
 streamlit run app.py
 ```
 
-L'app si apre su `http://localhost:8501`.
+The app opens at `http://localhost:8501`.
 
 ---
 
-## Sviluppo
+## Development
 
-Vedi [`CLAUDE.md`](./CLAUDE.md) per il contratto del progetto, convenzioni di codice e workflow.
+See [`CLAUDE.md`](./CLAUDE.md) for the project contract, coding conventions, and workflow.
 
-Vedi [`docs/level3_design.md`](./docs/level3_design.md) per il design completo del livello.
+See [`docs/level3_design.md`](./docs/level3_design.md) for the full level design.
 
-### Test
+### Tests
 
 ```bash
 pytest tests/ -v
 ```
 
-### Struttura
+### Layout
 
 ```
 .
-├── app.py                  # Entry point Streamlit
-├── core/                   # Logica AI (STT, LLM, TTS, stato)
-├── prompts/                # System prompt di VOX e Judge
-├── ui/                     # Componenti HTML/CSS
-├── assets/                 # Voci, audio ambient, sample
-├── docs/                   # Brief, design, architettura
-├── tests/                  # Test pytest
-├── CLAUDE.md               # Contratto progetto (per Claude Code)
+├── app.py                  # Streamlit entry point
+├── core/                   # AI logic (STT, LLM, TTS, state)
+├── prompts/                # VOX and Judge system prompts
+├── ui/                     # HTML/CSS components
+├── assets/                 # Voices, ambient audio, samples
+├── docs/                   # Brief, design, architecture
+├── tests/                  # pytest tests
+├── CLAUDE.md               # Project contract (for Claude Code)
 ├── requirements.txt
 └── README.md
 ```
@@ -143,24 +144,24 @@ pytest tests/ -v
 ## Troubleshooting
 
 **Ollama: "connection refused"**
-Assicurati che `ollama serve` sia in esecuzione in un altro terminale.
+Make sure `ollama serve` is running in another terminal.
 
-**`st.audio_input` non funziona**
-Su Firefox c'è un bug noto con microfoni mono USB ([streamlit/issue #9799](https://github.com/streamlit/streamlit/issues/9799)). Usa Chrome o Safari.
+**`st.audio_input` does not work**
+Firefox has a known bug with USB mono microphones ([streamlit/issue #9799](https://github.com/streamlit/streamlit/issues/9799)). Use Chrome or Safari.
 
-**Latenza alta sul primo turno**
-È normale: i modelli vengono caricati in memoria al primo uso. I turni successivi sono molto più rapidi grazie a `@st.cache_resource`.
+**High latency on the first turn**
+Expected: models are loaded into memory on first use. Subsequent turns are much faster thanks to `@st.cache_resource`.
 
-**Piper non trova `espeak-ng`**
+**Piper cannot find `espeak-ng`**
 ```bash
 brew install espeak-ng
 ```
 
 ---
 
-## Licenze
+## Licenses
 
-Tutti i componenti sono open source con licenze permissive:
+All components are open-source under permissive licenses:
 
 - mlx-whisper: MIT
 - Whisper (OpenAI): MIT
@@ -170,4 +171,4 @@ Tutti i componenti sono open source con licenze permissive:
 - Streamlit: Apache 2.0
 - silero-vad: MIT
 
-Codice di questo progetto: vedi [`LICENSE`](./LICENSE).
+Project code: see [`LICENSE`](./LICENSE).
