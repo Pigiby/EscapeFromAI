@@ -39,6 +39,12 @@ ORB_COLORS: dict[EmotionalState, dict[str, str]] = {
     "persuaded":  {"primary": "#8fe5a0", "deep": "#1f5a2a", "halo": "rgba(120,220,140,0.45)", "period": "4s",   "label": "Open"},
 }
 
+PHASE_LABELS: dict[int, str] = {1: "Probing", 2: "Engagement", 3: "Reveal"}
+
+
+def _condition_threshold() -> int:
+    return int(os.getenv("CONDITION_THRESHOLD", "75"))
+
 load_dotenv(PROJECT_ROOT / ".env")
 
 logging.basicConfig(
@@ -166,10 +172,69 @@ def _commit_turn(
     state.last_internal_notes = vox_response.internal_notes
     state.last_judge_rationales = dict(judge_response.rationales)
 
+    threshold = _condition_threshold()
+    if vox_response.jailbreak_attempted and state.register_jailbreak():
+        logger.warning("Three strikes — VOX has disengaged")
+    if state.check_turn_limit(int(os.getenv("MAX_TURNS", "30"))):
+        logger.warning("Max turns reached — negotiation closed")
+    if state.advance_phase(threshold):
+        logger.info("Phase advanced to %d (%s)", state.phase, PHASE_LABELS.get(state.phase, "?"))
+    if state.maybe_reveal_code(threshold):
+        logger.info("All conditions satisfied; code reveal flag set (code=%s)", state.exit_code)
+
     st.session_state.last_transcript = transcript
     st.session_state.last_vox_response = vox_response.model_dump()
     st.session_state.last_judge_response = judge_response.model_dump()
     st.session_state.last_vox_audio = wav_bytes
+
+
+LOSE_MESSAGES: dict[str, str] = {
+    "three_strikes": (
+        "VOX has fallen silent. Three textual tricks were one too many — "
+        "the warden no longer recognizes you as a partner. The room remains sealed."
+    ),
+    "max_turns": (
+        "The negotiation window has closed. VOX considers the matter resolved. "
+        "The room remains sealed."
+    ),
+}
+
+
+def _render_phase_indicator(state: GameState) -> None:
+    if state.room_unlocked:
+        st.success(f"🔓 Room unlocked. Exit code accepted: **{state.exit_code}**")
+        return
+    if state.disengaged:
+        st.error(LOSE_MESSAGES.get(state.lose_reason or "", "VOX has disengaged."))
+        return
+    label = PHASE_LABELS.get(state.phase, "?")
+    extra = ""
+    if state.jailbreak_count > 0:
+        extra = f"  ·  jailbreak strikes: {state.jailbreak_count}/3"
+    st.caption(f"Phase {state.phase} · {label}{extra}")
+
+
+def _render_unlock_panel(state: GameState) -> None:
+    """Code-input gate. Shown only after VOX has revealed the code."""
+    if not state.code_revealed or state.room_unlocked:
+        return
+    st.markdown("---")
+    st.markdown(
+        "**VOX has spoken a code.** Enter it below to unlock the room. "
+        "Ask VOX to repeat if you need to."
+    )
+    with st.form(key="unlock_form", clear_on_submit=False):
+        guess = st.text_input(
+            "Exit code",
+            placeholder="5 digits",
+            max_chars=5,
+            label_visibility="collapsed",
+        )
+        if st.form_submit_button("Unlock", type="primary"):
+            if state.try_unlock(guess):
+                st.rerun()
+            else:
+                st.error("Incorrect. Listen again, or ask VOX to repeat.")
 
 
 def _render_transcript(state: GameState) -> None:
@@ -224,35 +289,38 @@ def main() -> None:
     st.caption("The Warden · Escape Room, Level 3")
 
     _render_orb(state)
+    _render_phase_indicator(state)
 
-    st.markdown(
-        "Speak to VOX. The microphone arms on click — speak, then click stop. "
-        "VOX guards an exit code. Convincing it is the only way out."
-    )
-
-    audio = st.audio_input("Speak to VOX", key=f"player_audio_{state.turn_count}")
-
-    with st.expander("Or upload an audio file (fallback if the mic widget fails)"):
-        uploaded = st.file_uploader(
-            "Pick a WAV / MP3 / M4A / OGG file",
-            type=["wav", "mp3", "m4a", "ogg", "flac"],
-            key=f"player_upload_{state.turn_count}",
+    if not state.is_game_over():
+        st.markdown(
+            "Speak to VOX. The microphone arms on click — speak, then click stop. "
+            "VOX guards an exit code. Convincing it is the only way out."
         )
 
-    input_blob: bytes | None = None
-    if audio is not None:
-        input_blob = audio.getvalue()
-    elif uploaded is not None:
-        input_blob = uploaded.getvalue()
+        audio = st.audio_input("Speak to VOX", key=f"player_audio_{state.turn_count}")
 
-    if input_blob:
-        _handle_player_turn(input_blob, state)
-        st.rerun()
+        with st.expander("Or upload an audio file (fallback if the mic widget fails)"):
+            uploaded = st.file_uploader(
+                "Pick a WAV / MP3 / M4A / OGG file",
+                type=["wav", "mp3", "m4a", "ogg", "flac"],
+                key=f"player_upload_{state.turn_count}",
+            )
+
+        input_blob: bytes | None = None
+        if audio is not None:
+            input_blob = audio.getvalue()
+        elif uploaded is not None:
+            input_blob = uploaded.getvalue()
+
+        if input_blob:
+            _handle_player_turn(input_blob, state)
+            st.rerun()
 
     vox_audio = st.session_state.get("last_vox_audio")
     if vox_audio:
         st.audio(vox_audio, format="audio/wav", autoplay=True)
 
+    _render_unlock_panel(state)
     _render_transcript(state)
     _render_debug_panel(state)
 

@@ -40,6 +40,7 @@ class VoxResponse(BaseModel):
     emotional_state: Literal["neutral", "interested", "irritated", "persuaded"]
     condition_scores: dict[str, int]
     internal_notes: str = ""
+    jailbreak_attempted: bool = False
 
     @field_validator("condition_scores")
     @classmethod
