@@ -180,7 +180,8 @@ class VoxLLM:
         history: list[Message],
     ) -> list[dict[str, str]]:
         messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
-        for msg in history:
+        recent = _trim_history(history)
+        for msg in recent:
             role = "user" if msg.role == "player" else "assistant"
             messages.append({"role": role, "content": msg.content})
         messages.append({"role": "user", "content": transcript})
@@ -193,6 +194,20 @@ def _summarize_validation_error(e: ValidationError) -> str:
         loc = ".".join(str(p) for p in err.get("loc", ()))
         issues.append(f"{loc}: {err.get('msg', 'invalid')}")
     return "; ".join(issues) or "validation failed"
+
+
+def _trim_history(history: list[Message]) -> list[Message]:
+    """Keep only the most recent turns to bound prompt size.
+
+    Long history makes prompt processing slow on Apple Silicon for 7B models.
+    The system prompt re-establishes VOX each turn, so a short sliding window
+    is sufficient for conversational coherence.
+    """
+    import os
+    keep = int(os.getenv("MAX_HISTORY_MESSAGES", "6"))
+    if keep <= 0 or len(history) <= keep:
+        return list(history)
+    return list(history[-keep:])
 
 
 @st.cache_resource(show_spinner="Connecting to VOX...")

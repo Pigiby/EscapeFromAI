@@ -12,13 +12,37 @@
     overflow: hidden;
   }
   .orb-wrap {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     height: 240px;
   }
+  .orb-stage {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Outer halo ring — slow counter-pulse for depth. */
+  .orb-halo-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      var(--orb-halo, rgba(80, 140, 220, 0.25)) 0%,
+      transparent 70%
+    );
+    animation: vox-halo calc(var(--orb-period, 3s) * 1.7) ease-in-out infinite;
+    pointer-events: none;
+  }
+  /* Inner orb. */
   .orb {
+    position: relative;
     width: 180px;
     height: 180px;
     border-radius: 50%;
@@ -28,17 +52,39 @@
       var(--orb-deep, #1a3a78) 60%,
       #0a1530 100%
     );
-    box-shadow: 0 0 48px 10px var(--orb-halo, rgba(80, 140, 220, 0.4));
+    box-shadow:
+      0 0 48px 10px var(--orb-halo, rgba(80, 140, 220, 0.4)),
+      inset 0 0 30px rgba(0, 0, 0, 0.35);
     animation: vox-pulse var(--orb-period, 3s) ease-in-out infinite;
+  }
+  /* Specular highlight overlay. */
+  .orb::before {
+    content: "";
+    position: absolute;
+    top: 12%;
+    left: 18%;
+    width: 36%;
+    height: 22%;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(255, 255, 255, 0.35) 0%,
+      transparent 70%
+    );
+    filter: blur(2px);
   }
   @keyframes vox-pulse {
     0%, 100% { transform: scale(1.00); opacity: 0.92; }
     50%      { transform: scale(1.06); opacity: 1.00; }
   }
+  @keyframes vox-halo {
+    0%, 100% { transform: scale(1.00); opacity: 0.55; }
+    50%      { transform: scale(1.15); opacity: 0.85; }
+  }
   .orb-state {
     margin-top: 14px;
     font-size: 11px;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
     color: rgba(233, 234, 238, 0.55);
   }
@@ -47,14 +93,19 @@
 <body>
   <div class="orb-wrap">
     <div
-      class="orb"
+      class="orb-stage"
+      role="img"
+      aria-label="VOX presence orb, state: {STATE_LABEL}"
       style="
         --orb-primary: {ORB_PRIMARY};
         --orb-deep:    {ORB_DEEP};
         --orb-halo:    {ORB_HALO};
         --orb-period:  {ORB_PERIOD};
       "
-    ></div>
+    >
+      <div class="orb-halo-ring"></div>
+      <div class="orb"></div>
+    </div>
     <div class="orb-state">{STATE_LABEL}</div>
   </div>
 </body>

@@ -152,8 +152,11 @@ class JudgeLLM:
 
 def _format_conversation(history: list[Message], latest_player_line: str) -> str:
     """Render the conversation as plain text for the Judge's single-user-message input."""
+    from core.llm import _trim_history  # share the same window policy as VOX
+
+    recent = _trim_history(history)
     lines: list[str] = []
-    for msg in history:
+    for msg in recent:
         speaker = "Player" if msg.role == "player" else "VOX"
         lines.append(f"{speaker}: {msg.content}")
     lines.append(f"Player: {latest_player_line}")

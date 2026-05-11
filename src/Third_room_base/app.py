@@ -31,6 +31,7 @@ VOX_PROMPT_PATH = PROJECT_ROOT / "prompts" / "vox_system.md"
 JUDGE_PROMPT_PATH = PROJECT_ROOT / "prompts" / "judge_system.md"
 STYLES_PATH = PROJECT_ROOT / "ui" / "styles.css"
 ORB_PATH = PROJECT_ROOT / "ui" / "orb.html"
+DRONE_PATH = PROJECT_ROOT / "assets" / "ambient" / "drone.wav"
 
 ORB_COLORS: dict[EmotionalState, dict[str, str]] = {
     "neutral":    {"primary": "#6aa6ff", "deep": "#1a3a78", "halo": "rgba(80,140,220,0.40)",  "period": "3s",   "label": "Listening"},
@@ -64,6 +65,46 @@ def _ensure_game_state() -> GameState:
 def _inject_styles() -> None:
     css = STYLES_PATH.read_text(encoding="utf-8")
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+
+@st.cache_resource(show_spinner=False)
+def _drone_data_url() -> str | None:
+    """Read and base64-encode the ambient drone WAV. Cached for the session."""
+    if not DRONE_PATH.exists():
+        return None
+    import base64
+    encoded = base64.b64encode(DRONE_PATH.read_bytes()).decode("ascii")
+    return f"data:audio/wav;base64,{encoded}"
+
+
+def _render_ambient_drone() -> None:
+    """Render a looping low-volume drone. Gated by the AMBIENT_DRONE env var."""
+    if os.getenv("AMBIENT_DRONE", "true").lower() != "true":
+        return
+    data_url = _drone_data_url()
+    if not data_url:
+        logger.info("AMBIENT_DRONE on but drone.wav not found at %s", DRONE_PATH)
+        return
+    volume = float(os.getenv("AMBIENT_DRONE_VOLUME", "0.15"))
+    components.html(
+        f"""
+        <audio id="vox-drone" autoplay loop preload="auto"
+               aria-label="ambient drone background">
+            <source src="{data_url}" type="audio/wav" />
+        </audio>
+        <script>
+          const a = document.getElementById('vox-drone');
+          if (a) {{
+            a.volume = {volume};
+            // Some browsers block autoplay until a user interaction; retry on click.
+            const tryPlay = () => a.play().catch(() => {{}});
+            tryPlay();
+            document.addEventListener('click', tryPlay, {{ once: true }});
+          }}
+        </script>
+        """,
+        height=0,
+    )
 
 
 def _render_orb(state: GameState) -> None:
@@ -282,6 +323,7 @@ def main() -> None:
     )
 
     _inject_styles()
+    _render_ambient_drone()
 
     state = _ensure_game_state()
 

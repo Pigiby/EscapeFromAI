@@ -69,3 +69,52 @@
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Form for the unlock code: monospace, glowing on focus. */
+.stApp [data-testid="stTextInput"] input {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.4em;
+  font-size: 22px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(233, 234, 238, 0.18);
+  color: var(--vox-fg);
+}
+.stApp [data-testid="stTextInput"] input:focus {
+  border-color: var(--vox-accent);
+  box-shadow: 0 0 12px rgba(106, 166, 255, 0.35);
+  outline: none;
+}
+
+/* Primary buttons (the "Unlock" submit). */
+.stApp button[kind="primary"] {
+  background: linear-gradient(180deg, #2a4a8a 0%, #163068 100%);
+  border: 1px solid rgba(106, 166, 255, 0.5);
+  color: var(--vox-fg);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.stApp button[kind="primary"]:hover {
+  background: linear-gradient(180deg, #355aa0 0%, #1b3a80 100%);
+  box-shadow: 0 0 16px rgba(106, 166, 255, 0.35);
+}
+
+/* Success / error banners — calmer palette. */
+.stApp [data-testid="stAlert"][data-baseweb="notification"] {
+  border-radius: 10px;
+}
+
+/* Soft vignette over the whole app. */
+.stApp::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 50%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+  z-index: 0;
+}
