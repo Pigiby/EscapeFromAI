@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import streamlit as st
@@ -130,23 +129,25 @@ def _run_vox_and_judge(
     transcript: str,
     state: GameState,
 ) -> tuple[VoxResponse, JudgeResponse]:
-    """Run VOX and the Judge concurrently. Total latency is bounded by VOX (slower)."""
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        vox_future = executor.submit(
-            vox.generate_structured,
-            system_prompt=vox_prompt,
-            transcript=transcript,
-            history=state.history,
-            previous_scores=state.vox_scores,
-        )
-        judge_future = executor.submit(
-            judge.evaluate,
-            system_prompt=judge_prompt,
-            transcript=transcript,
-            history=state.history,
-            previous_scores=state.judge_scores,
-        )
-        return vox_future.result(), judge_future.result()
+    """Run VOX, then Judge — sequentially.
+
+    On Apple Silicon both models share the Metal GPU, so running them in
+    parallel produces severe contention and individual calls bloat past the
+    timeout. Sequential calls are typically faster end-to-end on this hardware.
+    """
+    vox_response = vox.generate_structured(
+        system_prompt=vox_prompt,
+        transcript=transcript,
+        history=state.history,
+        previous_scores=state.vox_scores,
+    )
+    judge_response = judge.evaluate(
+        system_prompt=judge_prompt,
+        transcript=transcript,
+        history=state.history,
+        previous_scores=state.judge_scores,
+    )
+    return vox_response, judge_response
 
 
 def _commit_turn(
@@ -230,8 +231,22 @@ def main() -> None:
     )
 
     audio = st.audio_input("Speak to VOX", key=f"player_audio_{state.turn_count}")
+
+    with st.expander("Or upload an audio file (fallback if the mic widget fails)"):
+        uploaded = st.file_uploader(
+            "Pick a WAV / MP3 / M4A / OGG file",
+            type=["wav", "mp3", "m4a", "ogg", "flac"],
+            key=f"player_upload_{state.turn_count}",
+        )
+
+    input_blob: bytes | None = None
     if audio is not None:
-        _handle_player_turn(audio.getvalue(), state)
+        input_blob = audio.getvalue()
+    elif uploaded is not None:
+        input_blob = uploaded.getvalue()
+
+    if input_blob:
+        _handle_player_turn(input_blob, state)
         st.rerun()
 
     vox_audio = st.session_state.get("last_vox_audio")

@@ -17,22 +17,38 @@ logger = logging.getLogger(__name__)
 
 
 def decode_audio_blob(raw: bytes) -> np.ndarray:
-    """Decode a raw audio blob (WAV/OGG/etc.) to 16 kHz mono float32.
+    """Decode a raw audio blob (WAV/OGG/M4A/MP3/...) to 16 kHz mono float32.
+
+    Tries libsndfile first (fast, handles WAV/OGG/FLAC/Opus from st.audio_input).
+    Falls back to librosa+audioread for formats libsndfile can't read (M4A, MP3),
+    which is common when the user uploads a recording from macOS Voice Memos.
 
     Args:
-        raw: The bytes returned by `st.audio_input(...)` (or any file-like blob
-            readable by libsndfile).
+        raw: The bytes returned by `st.audio_input(...)` or `st.file_uploader(...)`.
 
     Returns:
         1-D numpy array, float32, sample rate 16 kHz.
 
     Raises:
-        ValueError: If the blob is empty or cannot be decoded.
+        ValueError: If the blob is empty or cannot be decoded by any backend.
     """
     if not raw:
         raise ValueError("Empty audio blob")
-    with io.BytesIO(raw) as buf:
-        data, sample_rate = sf.read(buf, dtype="float32", always_2d=False)
+    try:
+        with io.BytesIO(raw) as buf:
+            data, sample_rate = sf.read(buf, dtype="float32", always_2d=False)
+    except Exception as sf_err:
+        logger.info("soundfile could not decode (%s); falling back to librosa", sf_err)
+        try:
+            import librosa
+        except ImportError as imp_err:
+            raise ValueError(
+                f"Audio format not supported by libsndfile and librosa is not available: {sf_err}"
+            ) from imp_err
+        with io.BytesIO(raw) as buf:
+            data, sample_rate = librosa.load(buf, sr=None, mono=False)
+        if data.ndim == 2:
+            data = data.T
     return _to_float32_mono_16k(data, sample_rate)
 
 

@@ -33,9 +33,12 @@ class PiperTTS:
         """Synthesize `text` to in-memory WAV bytes (16-bit PCM, model SR)."""
         if not text.strip():
             return b""
+        from piper.config import SynthesisConfig
+
+        syn_config = SynthesisConfig(length_scale=self.length_scale)
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wav_file:
-            self._voice.synthesize(text, wav_file, length_scale=self.length_scale)
+            self._voice.synthesize_wav(text, wav_file, syn_config=syn_config)
         data = buf.getvalue()
         logger.info("TTS: %d chars -> %d bytes wav", len(text), len(data))
         return data

@@ -128,8 +128,9 @@ class JudgeLLM:
         response = self.client.chat(
             model=self.model,
             messages=messages,
-            options={"temperature": self.temperature},
+            options={"temperature": self.temperature, "num_predict": 256},
             format="json",
+            keep_alive="30m",
         )
         content = response["message"]["content"]
         logger.info("Judge: %d-char reply", len(content))
