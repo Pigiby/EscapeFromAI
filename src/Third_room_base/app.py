@@ -308,6 +308,27 @@ def _render_debug_panel(state: GameState) -> None:
             st.markdown("**Judge rationales:**")
             for k, v in state.last_judge_rationales.items():
                 st.markdown(f"- `{k}`: {v}")
+
+        st.markdown("---")
+        st.markdown("**Dev shortcuts** (only visible with `DEBUG_PANEL=true`):")
+        st.caption(f"Current exit code: `{state.exit_code}`")
+        dcols = st.columns(2)
+        with dcols[0]:
+            if st.button("Force code reveal", help="Sets all scores to 100 and triggers reveal"):
+                full = {k: 100 for k in state.vox_scores.keys()}
+                state.update_scores(vox_scores=full, judge_scores=full)
+                state.vox_emotional_state = "persuaded"
+                state.maybe_reveal_code(threshold)
+                st.rerun()
+        with dcols[1]:
+            if st.button("Reset session", help="Wipe the conversation and start over"):
+                st.session_state.pop("game_state", None)
+                st.session_state.pop("last_vox_audio", None)
+                st.session_state.pop("last_transcript", None)
+                st.session_state.pop("last_vox_response", None)
+                st.session_state.pop("last_judge_response", None)
+                st.rerun()
+
         st.markdown("**Last VOX response (parsed):**")
         st.json(st.session_state.get("last_vox_response", {}))
         st.markdown("**Last Judge response (parsed):**")
