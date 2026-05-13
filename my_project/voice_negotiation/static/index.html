@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VOX — The Warden</title>
+<style>
+  :root {
+    --vox-bg: #0a0a0c;
+    --vox-fg: #e9eaee;
+    --vox-fg-dim: rgba(233, 234, 238, 0.55);
+    --vox-accent: #6aa6ff;
+    --vox-danger: #ff7373;
+    --vox-success: #8fe5a0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: radial-gradient(ellipse at center top, #11131a 0%, var(--vox-bg) 70%);
+    color: var(--vox-fg);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    min-height: 100vh;
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.35) 100%);
+    z-index: 0;
+  }
+  main {
+    max-width: 720px; margin: 0 auto; padding: 32px 24px 64px;
+    position: relative; z-index: 1;
+  }
+  h1 {
+    text-align: center; letter-spacing: 0.32em; text-transform: uppercase;
+    font-weight: 600; margin: 0 0 4px;
+    text-shadow: 0 0 16px rgba(106, 166, 255, 0.25);
+  }
+  .subtitle {
+    text-align: center; color: var(--vox-fg-dim);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    font-size: 11px; margin-bottom: 32px;
+  }
+
+  /* Orb */
+  .orb-container {
+    display: flex; flex-direction: column; align-items: center;
+    margin: 24px 0;
+  }
+  .orb {
+    position: relative; width: 160px; height: 160px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%,
+      var(--orb-primary, #6aa6ff) 0%,
+      var(--orb-deep, #1a3a78) 70%,
+      transparent 100%);
+    animation: pulse var(--orb-period, 3s) ease-in-out infinite;
+    box-shadow: 0 0 60px var(--orb-halo, rgba(80,140,220,0.40));
+  }
+  .orb::before {
+    content: ""; position: absolute; top: 18%; left: 22%;
+    width: 28%; height: 22%; border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.45) 0%, transparent 70%);
+    filter: blur(4px);
+  }
+  .orb::after {
+    content: ""; position: absolute; inset: -8%;
+    border-radius: 50%; border: 1px solid var(--orb-halo, rgba(80,140,220,0.40));
+    animation: halo calc(var(--orb-period, 3s) * 1.7) ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.06); filter: brightness(1.15); }
+  }
+  @keyframes halo {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.1); opacity: 0.2; }
+  }
+  .orb-label {
+    margin-top: 16px; color: var(--vox-fg-dim);
+    letter-spacing: 0.18em; text-transform: uppercase; font-size: 11px;
+  }
+  .phase-indicator {
+    text-align: center; color: var(--vox-fg-dim);
+    font-size: 12px; letter-spacing: 0.12em; margin: 8px 0 24px;
+  }
+
+  /* Instructions */
+  .instructions {
+    text-align: center; color: var(--vox-fg-dim);
+    line-height: 1.6; margin-bottom: 16px;
+  }
+
+  /* Mic */
+  .mic-row {
+    display: flex; justify-content: center; gap: 12px; margin: 24px 0;
+  }
+  button {
+    font-family: inherit; cursor: pointer;
+    background: rgba(255,255,255,0.02); color: var(--vox-fg);
+    border: 1px solid rgba(233,234,238,0.18); border-radius: 8px;
+    padding: 12px 24px; letter-spacing: 0.12em; text-transform: uppercase;
+    font-size: 12px; transition: all 0.2s;
+  }
+  button:hover:not(:disabled) {
+    border-color: var(--vox-accent);
+    box-shadow: 0 0 12px rgba(106,166,255,0.25);
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.primary {
+    background: linear-gradient(180deg, #2a4a8a 0%, #163068 100%);
+    border-color: rgba(106,166,255,0.5);
+  }
+  button.recording {
+    background: rgba(255,115,115,0.15); border-color: var(--vox-danger);
+    animation: blink 1s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  audio { width: 100%; margin-top: 12px; filter: invert(0.9); }
+
+  /* Status messages */
+  .status {
+    text-align: center; margin: 12px 0; min-height: 24px;
+    color: var(--vox-fg-dim); font-size: 13px;
+  }
+  .status.error { color: var(--vox-danger); }
+  .status.success { color: var(--vox-success); }
+
+  /* Unlock form */
+  .unlock-panel {
+    margin: 24px 0; padding: 20px; border: 1px solid rgba(106,166,255,0.3);
+    border-radius: 10px; background: rgba(106,166,255,0.04); text-align: center;
+  }
+  .unlock-panel p { margin: 0 0 12px; color: var(--vox-fg); }
+  .unlock-panel input {
+    font-family: inherit; letter-spacing: 0.4em; font-size: 22px;
+    text-align: center; padding: 12px; width: 220px;
+    background: rgba(255,255,255,0.03); color: var(--vox-fg);
+    border: 1px solid rgba(233,234,238,0.18); border-radius: 6px;
+  }
+  .unlock-panel input:focus {
+    outline: none; border-color: var(--vox-accent);
+    box-shadow: 0 0 12px rgba(106,166,255,0.35);
+  }
+  .unlock-result { margin-top: 12px; font-size: 14px; }
+
+  /* End-of-game banner */
+  .banner {
+    margin: 24px 0; padding: 20px; border-radius: 10px;
+    text-align: center; line-height: 1.5;
+  }
+  .banner.win {
+    border: 1px solid var(--vox-success); background: rgba(143,229,160,0.08);
+    color: var(--vox-success);
+  }
+  .banner.lose {
+    border: 1px solid var(--vox-danger); background: rgba(255,115,115,0.08);
+    color: var(--vox-danger);
+  }
+
+  /* Transcript */
+  h2 { font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--vox-fg-dim); }
+  .transcript .turn { margin-bottom: 12px; }
+  .transcript .speaker { color: var(--vox-accent); letter-spacing: 0.05em; font-weight: 600; }
+  .transcript .text { color: var(--vox-fg); }
+
+  /* Debug panel */
+  details.debug { margin-top: 32px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; }
+  details.debug > summary { cursor: pointer; color: var(--vox-fg-dim); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; }
+  .scores-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .score-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 8px; text-align: center; }
+  .score-card .label { font-size: 10px; color: var(--vox-fg-dim); letter-spacing: 0.12em; text-transform: uppercase; }
+  .score-card .value { font-size: 22px; font-weight: 300; margin-top: 4px; }
+  .score-card .value.ok { color: var(--vox-success); }
+  .score-card .breakdown { font-size: 10px; color: var(--vox-fg-dim); margin-top: 2px; }
+  .dev-row { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  .dev-row button { padding: 8px 12px; font-size: 11px; flex: 1 1 auto; }
+  .mood-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0; }
+  .mood-row button { padding: 8px 4px; font-size: 10px; }
+  pre.json { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 11px; color: var(--vox-fg-dim); }
+  .rationale { font-size: 11px; color: var(--vox-fg-dim); margin: 4px 0; }
+  .rationale code { background: rgba(106,166,255,0.1); padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Ambient drone (low volume, looping, autoplay-retry on first click) -->
+<audio id="ambient-drone" loop preload="auto">
+  <source src="/voice/assets/ambient/drone.wav" type="audio/wav" />
+</audio>
+
+<main>
+  <h1>VOX</h1>
+  <p class="subtitle">The Warden · Escape Room, Level 3</p>
+
+  <div class="orb-container">
+    <div id="orb" class="orb"></div>
+    <div id="orb-label" class="orb-label">Listening</div>
+  </div>
+  <div id="phase-indicator" class="phase-indicator">Phase 1 · Probing</div>
+
+  <p class="instructions" id="instructions">
+    Speak to VOX. Click the microphone, speak one short sentence, click stop.
+    VOX guards an exit code. Convincing it is the only way out.
+  </p>
+
+  <div class="mic-row">
+    <button id="mic-button" type="button">🎤 Record</button>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <audio id="vox-audio" controls></audio>
+
+  <div id="banner-container"></div>
+
+  <div id="unlock-container"></div>
+
+  <h2>Conversation</h2>
+  <div id="transcript" class="transcript"></div>
+
+  <details class="debug" id="debug-panel" style="display:none;">
+    <summary>Debug</summary>
+    <div id="debug-content"></div>
+  </details>
+</main>
+
+<script>
+"use strict";
+
+// ---------- State ----------
+let mediaRecorder = null;
+let recordingChunks = [];
+let currentState = null;
+let isProcessing = false;
+
+const ORB_PALETTES = {
+  neutral:    { primary: "#6aa6ff", deep: "#1a3a78", halo: "rgba(80,140,220,0.40)",  period: "3s",   label: "Listening" },
+  interested: { primary: "#f7c66b", deep: "#6e4a00", halo: "rgba(240,180,80,0.45)",  period: "2.4s", label: "Curious" },
+  irritated:  { primary: "#ff7373", deep: "#6a1818", halo: "rgba(220,80,80,0.50)",   period: "1.6s", label: "Cold" },
+  persuaded:  { primary: "#8fe5a0", deep: "#1f5a2a", halo: "rgba(120,220,140,0.45)", period: "4s",   label: "Open" },
+};
+
+// ---------- Utilities ----------
+function $(id) { return document.getElementById(id); }
+
+function setStatus(msg, kind = "") {
+  const el = $("status");
+  el.textContent = msg || "";
+  el.className = "status" + (kind ? " " + kind : "");
+}
+
+function b64ToBlob(b64, type = "audio/wav") {
+  const bin = atob(b64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type });
+}
+
+// ---------- Render ----------
+function renderOrb(mood) {
+  const palette = ORB_PALETTES[mood] || ORB_PALETTES.neutral;
+  const orb = $("orb");
+  orb.style.setProperty("--orb-primary", palette.primary);
+  orb.style.setProperty("--orb-deep", palette.deep);
+  orb.style.setProperty("--orb-halo", palette.halo);
+  orb.style.setProperty("--orb-period", palette.period);
+  $("orb-label").textContent = palette.label;
+}
+
+function renderPhaseIndicator(state) {
+  const el = $("phase-indicator");
+  if (state.room_unlocked || state.disengaged) {
+    el.textContent = "";
+    return;
+  }
+  let txt = `Phase ${state.phase} · ${state.phase_label}`;
+  if (state.jailbreak_count > 0) {
+    txt += `  ·  jailbreak strikes: ${state.jailbreak_count}/3`;
+  }
+  el.textContent = txt;
+}
+
+function renderBanner(state) {
+  const c = $("banner-container");
+  c.innerHTML = "";
+  if (state.room_unlocked) {
+    const div = document.createElement("div");
+    div.className = "banner win";
+    div.innerHTML = `🔓 Room unlocked. Exit code accepted: <strong>${escapeHtml(state.exit_code || "")}</strong>`;
+    c.appendChild(div);
+  } else if (state.disengaged) {
+    const div = document.createElement("div");
+    div.className = "banner lose";
+    const messages = {
+      three_strikes: "VOX has fallen silent. Three textual tricks were one too many — the warden no longer recognizes you as a partner. The room remains sealed.",
+      max_turns: "The negotiation window has closed. VOX considers the matter resolved. The room remains sealed.",
+    };
+    div.textContent = messages[state.lose_reason] || "VOX has disengaged.";
+    c.appendChild(div);
+  }
+}
+
+function renderUnlockPanel(state) {
+  const c = $("unlock-container");
+  c.innerHTML = "";
+  if (!state.code_revealed || state.room_unlocked) return;
+  const panel = document.createElement("div");
+  panel.className = "unlock-panel";
+  panel.innerHTML = `
+    <p><strong>VOX has spoken a code.</strong><br>Enter it below to unlock the room.</p>
+    <input id="unlock-input" type="text" maxlength="5" placeholder="5 digits" inputmode="numeric" autocomplete="off">
+    <div>
+      <button id="unlock-submit" class="primary" type="button">Unlock</button>
+    </div>
+    <div id="unlock-result" class="unlock-result"></div>
+  `;
+  c.appendChild(panel);
+  $("unlock-submit").addEventListener("click", submitUnlock);
+  $("unlock-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") submitUnlock();
+  });
+}
+
+function renderTranscript(state) {
+  const c = $("transcript");
+  c.innerHTML = "";
+  for (const m of state.history) {
+    const div = document.createElement("div");
+    div.className = "turn";
+    const label = m.role === "player" ? "You" : "VOX";
+    div.innerHTML = `<span class="speaker">${label}:</span> <span class="text">${escapeHtml(m.content)}</span>`;
+    c.appendChild(div);
+  }
+}
+
+function renderDebugPanel(state) {
+  const panel = $("debug-panel");
+  if (!state.debug_enabled) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+  const c = $("debug-content");
+  const keys = ["recognition", "reciprocity", "self_disclosure"];
+  let html = `<p style="font-size:12px; color: var(--vox-fg-dim); margin: 12px 0 4px;">Condition scores (threshold = ${state.threshold}):</p>`;
+  html += `<div class="scores-row">`;
+  for (const k of keys) {
+    const merged = state.condition_scores[k] ?? 0;
+    const ok = state.satisfied[k];
+    html += `
+      <div class="score-card">
+        <div class="label">${k}</div>
+        <div class="value ${ok ? "ok" : ""}">${merged}/100${ok ? " ✓" : ""}</div>
+        <div class="breakdown">VOX ${state.vox_scores[k] ?? 0} · Judge ${state.judge_scores[k] ?? 0}</div>
+      </div>`;
+  }
+  html += `</div>`;
+
+  html += `<p class="rationale"><strong>VOX internal_notes:</strong> ${escapeHtml(state.internal_notes || "—")}</p>`;
+  if (state.judge_rationales && Object.keys(state.judge_rationales).length > 0) {
+    html += `<p class="rationale" style="margin-top:8px;"><strong>Judge rationales:</strong></p>`;
+    for (const [k, v] of Object.entries(state.judge_rationales)) {
+      html += `<div class="rationale">- <code>${k}</code>: ${escapeHtml(v)}</div>`;
+    }
+  }
+
+  html += `<hr style="border:none; border-top:1px solid rgba(255,255,255,0.08); margin:16px 0;">`;
+  html += `<p style="font-size:12px; color: var(--vox-fg-dim);"><strong>Dev shortcuts:</strong></p>`;
+  html += `<p style="font-size:11px; color: var(--vox-fg-dim); margin: 4px 0 8px;">Current exit code: <code>${escapeHtml(state.exit_code || "?")}</code></p>`;
+  html += `<div class="dev-row">
+    <button type="button" id="dev-force-reveal">Force code reveal</button>
+    <button type="button" id="dev-reset">Reset session</button>
+  </div>`;
+
+  html += `<p style="font-size:12px; color: var(--vox-fg-dim); margin-top:12px;"><strong>Preview voice tones:</strong></p>`;
+  html += `<div class="mood-row">
+    <button type="button" data-mood="neutral">neutral</button>
+    <button type="button" data-mood="interested">interested</button>
+    <button type="button" data-mood="irritated">irritated</button>
+    <button type="button" data-mood="persuaded">persuaded</button>
+  </div>`;
+  html += `<audio id="preview-audio" controls style="display:none;"></audio>`;
+
+  c.innerHTML = html;
+
+  $("dev-force-reveal").addEventListener("click", forceReveal);
+  $("dev-reset").addEventListener("click", resetSession);
+  c.querySelectorAll("[data-mood]").forEach(btn => {
+    btn.addEventListener("click", () => previewMood(btn.dataset.mood));
+  });
+}
+
+function renderAll(state) {
+  currentState = state;
+  renderOrb(state.emotional_state);
+  renderPhaseIndicator(state);
+  renderBanner(state);
+  renderUnlockPanel(state);
+  renderTranscript(state);
+  renderDebugPanel(state);
+
+  const overOrUnlocked = state.room_unlocked || state.disengaged;
+  const btn = $("mic-button");
+  btn.disabled = overOrUnlocked || isProcessing;
+  if (!isProcessing) {
+    btn.textContent = "🎤 Record";
+    btn.classList.remove("recording");
+  }
+  $("instructions").style.display = overOrUnlocked ? "none" : "";
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+// ---------- API calls ----------
+async function loadState() {
+  const r = await fetch("/voice/state");
+  const state = await r.json();
+  renderAll(state);
+}
+
+async function submitTurn(blob) {
+  const fd = new FormData();
+  fd.append("audio", blob, "input.webm");
+  setProcessing(true);
+  setStatus("VOX is thinking…");
+  try {
+    const r = await fetch("/voice/turn", { method: "POST", body: fd });
+    let data;
+    try {
+      data = await r.json();
+    } catch (parseErr) {
+      const text = await r.text().catch(() => "");
+      throw new Error("Server returned non-JSON (HTTP " + r.status + "): " + text.slice(0, 200));
+    }
+    if (data.error === "empty_transcript") {
+      setStatus("I didn't catch that. Try again.", "error");
+      renderAll(data);
+      return;
+    }
+    if (!r.ok || data.error) {
+      setStatus(data.error || "Something went wrong.", "error");
+      return;
+    }
+    setStatus("");
+    if (data.audio_b64) {
+      const wavBlob = b64ToBlob(data.audio_b64, "audio/wav");
+      const url = URL.createObjectURL(wavBlob);
+      const audio = $("vox-audio");
+      audio.src = url;
+      audio.play().catch(() => {});
+    }
+    renderAll(data);
+  } catch (e) {
+    setStatus("Network error: " + e.message, "error");
+  } finally {
+    setProcessing(false);
+  }
+}
+
+function setProcessing(busy) {
+  isProcessing = busy;
+  const btn = $("mic-button");
+  if (busy) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Thinking…";
+    btn.classList.remove("recording");
+  } else if (currentState) {
+    // re-derive enabled state from the current GameState
+    renderAll(currentState);
+  } else {
+    btn.disabled = false;
+    btn.textContent = "🎤 Record";
+  }
+}
+
+async function submitUnlock() {
+  const input = $("unlock-input");
+  if (!input) return;
+  const code = input.value.trim();
+  const r = await fetch("/voice/unlock", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  const data = await r.json();
+  renderAll(data);
+  if (!data.success) {
+    const result = $("unlock-result");
+    if (result) {
+      result.textContent = "Incorrect. Listen again, or ask VOX to repeat.";
+      result.style.color = "var(--vox-danger)";
+    }
+  }
+}
+
+async function resetSession() {
+  const r = await fetch("/voice/reset", { method: "POST" });
+  const data = await r.json();
+  $("vox-audio").src = "";
+  renderAll(data);
+  setStatus("Session reset.", "success");
+  setTimeout(() => setStatus(""), 2000);
+}
+
+async function forceReveal() {
+  const r = await fetch("/voice/force_reveal", { method: "POST" });
+  const data = await r.json();
+  renderAll(data);
+  setStatus("Code reveal forced (dev).", "success");
+  setTimeout(() => setStatus(""), 2000);
+}
+
+async function previewMood(mood) {
+  const audio = $("preview-audio");
+  if (!audio) return;
+  audio.style.display = "";
+  audio.src = `/voice/preview/${mood}?t=${Date.now()}`;
+  audio.play().catch(() => {});
+}
+
+// ---------- Mic ----------
+async function toggleRecording() {
+  const btn = $("mic-button");
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+    // Disable the button straight away; submitTurn() will re-enable it
+    // once the server has replied. Prevents double-submits during the
+    // STT/LLM/TTS pipeline (~5-10s).
+    setProcessing(true);
+    setStatus("Processing audio…");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordingChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) recordingChunks.push(e.data);
+    };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(recordingChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      submitTurn(blob);
+    };
+    mediaRecorder.start();
+    btn.textContent = "⏹ Stop";
+    btn.classList.add("recording");
+    setStatus("Recording... click stop when done.");
+  } catch (err) {
+    setStatus("Microphone permission denied: " + err.message, "error");
+  }
+}
+
+// ---------- Init ----------
+window.addEventListener("DOMContentLoaded", () => {
+  $("mic-button").addEventListener("click", toggleRecording);
+  // Ambient drone autoplay (browsers often block until user gesture)
+  const drone = $("ambient-drone");
+  if (drone) {
+    drone.volume = 0.12;
+    drone.play().catch(() => {});
+    document.addEventListener("click", () => drone.play().catch(() => {}), { once: true });
+  }
+  loadState();
+});
+</script>
+</body>
+</html>

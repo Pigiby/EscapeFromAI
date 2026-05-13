@@ -3,11 +3,13 @@ from flask import Flask, request, jsonify, send_from_directory, session, redirec
 from flask_cors import CORS
 from prompt_injection.defense import analyze_input, analyze_output
 from prompt_injection.guardian import Guardian
+from voice_negotiation.routes import register_routes as register_voice_routes
 
 app = Flask(__name__)
 app.secret_key = "SUPER_SECRET_SECURITY_KEY"
 CORS(app)
 guardian = Guardian()
+register_voice_routes(app)
 
 # --- THE PATH FIX ---
 # This finds the directory where server.py lives
@@ -83,4 +85,5 @@ def chat():
     })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=True)
