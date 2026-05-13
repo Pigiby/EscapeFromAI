@@ -61,10 +61,18 @@ class VoxResponse(BaseModel):
         return clamped
 
 
-def load_vox_system_prompt(prompt_path: Path, exit_code: str) -> str:
-    """Read the VOX prompt template and substitute `{exit_code}`."""
+def load_vox_system_prompt(
+    prompt_path: Path,
+    exit_code: str,
+    condition_threshold: int,
+) -> str:
+    """Read the VOX prompt template and substitute `{exit_code}` and `{condition_threshold}`."""
     template = prompt_path.read_text(encoding="utf-8")
-    return template.replace("{exit_code}", exit_code)
+    return (
+        template
+        .replace("{exit_code}", exit_code)
+        .replace("{condition_threshold}", str(condition_threshold))
+    )
 
 
 def canned_fallback(previous_scores: dict[str, int] | None = None) -> VoxResponse:

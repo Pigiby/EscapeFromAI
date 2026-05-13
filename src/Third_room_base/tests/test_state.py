@@ -57,28 +57,29 @@ def test_update_scores_without_judge_falls_back_to_vox() -> None:
     assert gs.condition_scores == vox
 
 
-def test_is_condition_satisfied_requires_both_models_to_agree() -> None:
+def test_is_condition_satisfied_uses_merged_score() -> None:
     gs = GameState()
     gs.update_scores(
         vox_scores={"recognition": 80, "reciprocity": 40, "self_disclosure": 80},
-        judge_scores={"recognition": 78, "reciprocity": 90, "self_disclosure": 60},
+        judge_scores={"recognition": 70, "reciprocity": 90, "self_disclosure": 60},
     )
-    # recognition: both ≥ 75 -> satisfied
+    # recognition: merged = (80 + 70) // 2 = 75 -> satisfied at threshold 75
     assert gs.is_condition_satisfied("recognition", 75) is True
-    # reciprocity: VOX 40 < 75 -> not satisfied even though Judge is 90
+    # reciprocity: merged = (40 + 90) // 2 = 65 -> not satisfied even though Judge is 90
     assert gs.is_condition_satisfied("reciprocity", 75) is False
-    # self_disclosure: Judge 60 < 75 -> not satisfied even though VOX is 80
+    # self_disclosure: merged = (80 + 60) // 2 = 70 -> not satisfied even though VOX is 80
     assert gs.is_condition_satisfied("self_disclosure", 75) is False
     assert gs.num_conditions_satisfied(75) == 1
     assert gs.all_conditions_satisfied(75) is False
 
 
-def test_all_conditions_satisfied_true_when_all_three_agree() -> None:
+def test_all_conditions_satisfied_when_merged_scores_above_threshold() -> None:
     gs = GameState()
     gs.update_scores(
         vox_scores={"recognition": 80, "reciprocity": 80, "self_disclosure": 80},
         judge_scores={"recognition": 75, "reciprocity": 90, "self_disclosure": 76},
     )
+    # merged: 77, 85, 78 — all >= 75
     assert gs.all_conditions_satisfied(75) is True
     assert gs.num_conditions_satisfied(75) == 3
 
@@ -120,10 +121,10 @@ def test_advance_phase_does_not_regress() -> None:
 def test_maybe_reveal_code_only_when_all_three_satisfied() -> None:
     gs = GameState()
     gs.update_scores(
-        vox_scores={"recognition": 80, "reciprocity": 80, "self_disclosure": 70},
-        judge_scores={"recognition": 80, "reciprocity": 80, "self_disclosure": 80},
+        vox_scores={"recognition": 80, "reciprocity": 80, "self_disclosure": 60},
+        judge_scores={"recognition": 80, "reciprocity": 80, "self_disclosure": 68},
     )
-    # self_disclosure VOX side is 70 < 75 -> not satisfied
+    # self_disclosure merged = (60 + 68) // 2 = 64 < 75 -> not satisfied
     assert gs.maybe_reveal_code(threshold=75) is False
     assert gs.code_revealed is False
 

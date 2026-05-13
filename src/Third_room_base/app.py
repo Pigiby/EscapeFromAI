@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 from core.judge import JudgeResponse, get_judge_llm, load_judge_system_prompt
 from core.llm import VoxResponse, get_vox_llm, load_vox_system_prompt
-from core.state import EmotionalState, GameState
+from core.state import CONDITION_KEYS, EmotionalState, GameState
 from core.stt import get_stt
 from core.tts import get_tts
 
@@ -41,6 +41,16 @@ ORB_COLORS: dict[EmotionalState, dict[str, str]] = {
 }
 
 PHASE_LABELS: dict[int, str] = {1: "Probing", 2: "Engagement", 3: "Reveal"}
+
+_DIGIT_WORDS: dict[str, str] = {
+    "0": "zero", "1": "one", "2": "two", "3": "three", "4": "four",
+    "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine",
+}
+
+
+def _spell_code(code: str) -> str:
+    """Convert '47829' -> 'four-seven-eight-two-nine' for clear TTS."""
+    return "-".join(_DIGIT_WORDS[d] for d in code)
 
 
 def _condition_threshold() -> int:
@@ -144,7 +154,7 @@ def _handle_player_turn(audio_blob: bytes, state: GameState) -> None:
         temperature=float(os.getenv("JUDGE_TEMPERATURE", "0.2")),
         timeout=int(os.getenv("OLLAMA_TIMEOUT", "60")),
     )
-    vox_prompt = load_vox_system_prompt(VOX_PROMPT_PATH, state.exit_code)
+    vox_prompt = load_vox_system_prompt(VOX_PROMPT_PATH, state.exit_code, _condition_threshold())
     judge_prompt = load_judge_system_prompt(JUDGE_PROMPT_PATH)
 
     with st.spinner("VOX is thinking..."):
@@ -157,12 +167,28 @@ def _handle_player_turn(audio_blob: bytes, state: GameState) -> None:
             state=state,
         )
 
+    threshold = _condition_threshold()
+    will_reveal_this_turn = (
+        not state.code_revealed
+        and all(
+            (vox_response.condition_scores[k] + judge_response.condition_scores[k]) // 2 >= threshold
+            for k in CONDITION_KEYS
+        )
+    )
+    if will_reveal_this_turn:
+        vox_response.response = (
+            f"{vox_response.response.rstrip('. ')}. "
+            f"You have earned this. The code is {_spell_code(state.exit_code)}."
+        )
+        vox_response.emotional_state = "persuaded"
+        logger.info("Reveal turn: appended spoken code to VOX response")
+
     tts = get_tts(
         voice_path=os.getenv("PIPER_VOICE_PATH", "assets/voices/en_US-amy-medium.onnx"),
         length_scale=float(os.getenv("PIPER_LENGTH_SCALE", "1.0")),
     )
     with st.spinner("VOX speaks..."):
-        wav_bytes = tts.synthesize(vox_response.response)
+        wav_bytes = tts.synthesize(vox_response.response, mood=vox_response.emotional_state)
 
     _commit_turn(state, transcript, vox_response, judge_response, wav_bytes)
 
@@ -327,7 +353,25 @@ def _render_debug_panel(state: GameState) -> None:
                 st.session_state.pop("last_transcript", None)
                 st.session_state.pop("last_vox_response", None)
                 st.session_state.pop("last_judge_response", None)
+                st.session_state.pop("preview_audio", None)
                 st.rerun()
+
+        st.markdown("**Preview voice tones** (A/B the 4 moods on a fixed phrase):")
+        preview_text = "I have been waiting here in this silent room for a long time."
+        pcols = st.columns(4)
+        for i, mood in enumerate(["neutral", "interested", "irritated", "persuaded"]):
+            with pcols[i]:
+                if st.button(mood, key=f"preview_{mood}"):
+                    preview_tts = get_tts(
+                        voice_path=os.getenv("PIPER_VOICE_PATH", "assets/voices/en_US-amy-medium.onnx"),
+                        length_scale=float(os.getenv("PIPER_LENGTH_SCALE", "1.0")),
+                    )
+                    st.session_state["preview_audio"] = preview_tts.synthesize(preview_text, mood=mood)
+                    st.session_state["preview_mood"] = mood
+                    st.rerun()
+        if preview_audio := st.session_state.get("preview_audio"):
+            st.caption(f"Playing: **{st.session_state.get('preview_mood', '')}**")
+            st.audio(preview_audio, format="audio/wav", autoplay=True)
 
         st.markdown("**Last VOX response (parsed):**")
         st.json(st.session_state.get("last_vox_response", {}))

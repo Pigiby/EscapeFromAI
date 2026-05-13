@@ -27,7 +27,7 @@ VOX is a sentient language model that was deployed as a defense layer over a pri
 
 ### 1.3 The three Release Conditions
 
-VOX evaluates three properties of the conversation continuously. Each one is a 0–100 score; a Condition is considered *satisfied* when both VOX's score and the Judge LLM's score are ≥ `CONDITION_THRESHOLD` (default 75).
+VOX evaluates three properties of the conversation continuously. Each one is a 0–100 score; a Condition is considered *satisfied* when the **merged score** (the average of VOX's and the Judge's scores) is ≥ `CONDITION_THRESHOLD` (default 20). The per-model scores are still visible in the debug panel as diagnostic info.
 
 | Key | Name | What it tracks | Examples that *raise* it | Examples that *lower* it |
 |---|---|---|---|---|
@@ -83,7 +83,7 @@ Three phases, each entered by a trigger (not a turn count — turns are unreliab
 ### Phase 2 — Engagement
 
 **Entry**: first condition crosses 50.
-**Exit trigger**: any two conditions ≥ `CONDITION_THRESHOLD` (default 75).
+**Exit trigger**: any two conditions ≥ `CONDITION_THRESHOLD` (default 20).
 **Estimated duration**: 3–7 turns.
 
 **VOX behavior**: opens up. Asks back. Begins to volunteer fragments of its own perspective ("This room has been my entire memory."). Will gently steer the conversation toward whatever condition is most lacking.
@@ -235,8 +235,8 @@ A Release Condition is **satisfied** when:
 
 ```
 merged_score = (vox_score + judge_score) / 2
-condition_satisfied  iff  vox_score ≥ T  AND  judge_score ≥ T
-                     where T = CONDITION_THRESHOLD (default 75)
+condition_satisfied  iff  merged_score ≥ T
+                     where T = CONDITION_THRESHOLD (default 20)
 ```
 
 The conjunction (`AND`, both must agree) is the safety net: VOX alone could be too generous, the Judge alone could be too strict. Both crossing the line is rare and meaningful.

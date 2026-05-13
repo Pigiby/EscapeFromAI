@@ -80,8 +80,13 @@ class GameState(BaseModel):
         }
 
     def is_condition_satisfied(self, key: str, threshold: int) -> bool:
-        """A condition is satisfied iff both VOX and Judge agree it is."""
-        return self.vox_scores[key] >= threshold and self.judge_scores[key] >= threshold
+        """A condition is satisfied iff the merged score (avg of VOX + Judge) >= threshold.
+
+        The per-model scores remain visible in the debug panel as diagnostic
+        info, but they no longer gate progression — only the merged value does.
+        This matches what the player sees in the UI (the big number).
+        """
+        return self.condition_scores[key] >= threshold
 
     def all_conditions_satisfied(self, threshold: int) -> bool:
         return all(self.is_condition_satisfied(k, threshold) for k in CONDITION_KEYS)
