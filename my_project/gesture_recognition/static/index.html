@@ -808,239 +808,276 @@
     </div>
 
     <script type="module">
-        window.onload = () => {
-            console.log("Initializing Level 2 pre-generation...");
-            fetch('http://localhost:5001/generate', {
-                method: 'POST',
-                mode: 'cors' // Ensure CORS is handled if your server is on a different port
-            })
-                .then(response => console.log("Level 2 generation started:", response.status))
-                .catch(e => console.error("Generation trigger failed:", e));
-        };
-        import { GestureRecognizer, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9";
+    window.onload = () => {
+        console.log("Initializing Level 2 pre-generation...");
+        // Usiamo percorsi relativi per mantenere i cookie di sessione
+        fetch('/generate', {
+            method: 'POST'
+        })
+        .then(response => console.log("Level 2 generation status:", response.status))
+        .catch(e => console.error("Generation trigger failed:", e));
+    };
 
-        const MODEL_PATH = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
+    import { GestureRecognizer, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9";
 
-        let gestureRecognizer;
-        let lastVideoTime = -1;
-        let currentGesture = "None";
+    const MODEL_PATH = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
 
-        let gameState = {
-            isPlaying: false,
-            filenames: [],
-            currentIndex: 0,
-            correct: 0,
-            wrong: 0
-        };
+    let gestureRecognizer;
+    let lastVideoTime = -1;
+    let currentGesture = "None";
 
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const loading = document.getElementById('loading');
-        const startBtn = document.getElementById('startBtn');
-        const captureBtn = document.getElementById('captureBtn');
-        const hintBtn = document.getElementById('hintBtn');
+    let gameState = {
+        isPlaying: false,
+        filenames: [],
+        currentIndex: 0,
+        correct: 0,
+        wrong: 0
+    };
 
-        async function init() {
-            try {
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const loading = document.getElementById('loading');
+    const startBtn = document.getElementById('startBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const hintBtn = document.getElementById('hintBtn');
+    const nextLevelBtn = document.getElementById('nextLevelBtn');
 
-                const vision = await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm"
-                );
-                gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
-                    baseOptions: { modelAssetPath: MODEL_PATH, delegate: "GPU" },
-                    runningMode: "VIDEO",
-                    numHands: 1
-                });
-
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = stream;
-
-                video.addEventListener('loadeddata', () => {
-                    loading.style.display = 'none';
-                    startBtn.disabled = false;
-                    renderLoop();
-                });
-            } catch (err) {
-                loading.querySelector('.loading-text').textContent = "Error: " + err.message;
-            }
-        }
-
-        function renderLoop() {
-            if (video.currentTime !== lastVideoTime) {
-                lastVideoTime = video.currentTime;
-                const results = gestureRecognizer.recognizeForVideo(video, Date.now());
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                if (results.gestures.length > 0) {
-                    currentGesture = results.gestures[0][0].categoryName;
-                    document.getElementById('currentSign').textContent = currentGesture;
-                } else {
-                    currentGesture = "None";
-                    document.getElementById('currentSign').textContent = "---";
-                }
-            }
-            requestAnimationFrame(renderLoop);
-        }
-
-        async function checkStatusAndStart() {
-            startBtn.disabled = true;
-            showMsg("Verifying images...", "success");
-
-            try {
-                const response = await fetch('http://localhost:5001/status');
-                const data = await response.json();
-
-                if (data.complete && data.filenames.length > 0) {
-                    gameState.filenames = data.filenames.sort((a, b) => {
-                        const numA = parseInt(a.split('_').pop());
-                        const numB = parseInt(b.split('_').pop());
-                        return numA - numB;
-                    });
-                    window.startNewRound();
-                } else {
-                    showMsg("AI still processing. Please wait...", "error");
-                    startBtn.disabled = false;
-                }
-            } catch (e) {
-                showMsg("Server error!", "error");
-                startBtn.disabled = false;
-            }
-        }
-
-        window.startNewRound = function () {
-            gameState.currentIndex = 0;
-            gameState.correct = 0;
-            gameState.wrong = 0;
-            updateStats();
-
-            const intro = document.getElementById('introSequence');
-            const preview = document.getElementById('sequencePreview');
-            document.getElementById('introTitle').textContent = "Memorize the sequence!";
-            preview.innerHTML = '';
-
-            gameState.filenames.forEach((fileName) => {
-                const div = document.createElement('div');
-                div.className = 'sequence-item';
-
-                const img = document.createElement('img');
-                img.src = `static/assets/${fileName}`;
-
-                const label = document.createElement('div');
-                label.className = 'sequence-label';
-                label.textContent = fileName.split('_').slice(0, -1).join(' ').replace('_', ' ');
-
-                div.appendChild(img);
-                div.appendChild(label);
-                preview.appendChild(div);
+    async function init() {
+        try {
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.9/wasm"
+            );
+            gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+                baseOptions: { modelAssetPath: MODEL_PATH, delegate: "GPU" },
+                runningMode: "VIDEO",
+                numHands: 1
             });
 
-            intro.style.display = 'flex';
-            let count = 3;
-            document.getElementById('introTimer').textContent = count;
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
 
-            const timer = setInterval(() => {
-                count--;
-                document.getElementById('introTimer').textContent = count > 0 ? count : '';
-                if (count <= 0) {
-                    clearInterval(timer);
-                    intro.style.display = 'none';
-                    gameState.isPlaying = true;
-                    captureBtn.disabled = false;
-                    hintBtn.disabled = false;
-                    startBtn.style.display = 'none';
-                }
-            }, 1000);
-        };
+            video.addEventListener('loadeddata', () => {
+                loading.style.display = 'none';
+                startBtn.disabled = false;
+                renderLoop();
+            });
+        } catch (err) {
+            loading.querySelector('.loading-text').textContent = "Error: " + err.message;
+        }
+    }
 
-        window.showHint = function () {
-            if (!gameState.isPlaying) return;
-            const intro = document.getElementById('introSequence');
-            const preview = document.getElementById('sequencePreview');
-            document.getElementById('introTitle').textContent = "Hint!";
-            document.getElementById('introTimer').textContent = "";
-            preview.innerHTML = '';
+    function renderLoop() {
+        if (video.currentTime !== lastVideoTime) {
+            lastVideoTime = video.currentTime;
+            const results = gestureRecognizer.recognizeForVideo(video, Date.now());
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (results.gestures.length > 0) {
+                currentGesture = results.gestures[0][0].categoryName;
+                document.getElementById('currentSign').textContent = currentGesture;
+            } else {
+                currentGesture = "None";
+                document.getElementById('currentSign').textContent = "---";
+            }
+        }
+        requestAnimationFrame(renderLoop);
+    }
 
-            const currentFileName = gameState.filenames[gameState.currentIndex];
+    async function checkStatusAndStart() {
+        startBtn.disabled = true;
+        showMsg("Verifying images...", "success");
+
+        try {
+            // Rotta relativa per validare la sessione
+            const response = await fetch('/status');
+            const data = await response.json();
+
+            if (data.complete && data.filenames.length > 0) {
+                gameState.filenames = data.filenames.sort((a, b) => {
+                    const numA = parseInt(a.split('_').pop());
+                    const numB = parseInt(b.split('_').pop());
+                    return numA - numB;
+                });
+                window.startNewRound();
+            } else {
+                showMsg("AI still processing. Please wait...", "error");
+                startBtn.disabled = false;
+            }
+        } catch (e) {
+            showMsg("Server error!", "error");
+            startBtn.disabled = false;
+        }
+    }
+
+    window.startNewRound = function () {
+        gameState.currentIndex = 0;
+        gameState.correct = 0;
+        gameState.wrong = 0;
+        updateStats();
+
+        const intro = document.getElementById('introSequence');
+        const preview = document.getElementById('sequencePreview');
+        document.getElementById('introTitle').textContent = "Memorize the sequence!";
+        preview.innerHTML = '';
+
+        gameState.filenames.forEach((fileName) => {
             const div = document.createElement('div');
             div.className = 'sequence-item';
             const img = document.createElement('img');
-            img.src = img.src = `static/assets/${currentFileName}`;
+            // Nota: il path deve corrispondere alla rotta definita nel server.py
+            img.src = `/static/assets/${fileName}`;
+            
+            const label = document.createElement('div');
+            label.className = 'sequence-label';
+            label.textContent = fileName.split('_').slice(0, -1).join(' ').replace('_', ' ');
+
             div.appendChild(img);
+            div.appendChild(label);
             preview.appendChild(div);
+        });
 
-            intro.style.display = 'flex';
-            setTimeout(() => intro.style.display = 'none', 1200);
-        };
+        intro.style.display = 'flex';
+        let count = 3;
+        document.getElementById('introTimer').textContent = count;
 
-        window.capture = function () {
-            if (!gameState.isPlaying) return;
+        const timer = setInterval(() => {
+            count--;
+            document.getElementById('introTimer').textContent = count > 0 ? count : '';
+            if (count <= 0) {
+                clearInterval(timer);
+                intro.style.display = 'none';
+                gameState.isPlaying = true;
+                captureBtn.disabled = false;
+                hintBtn.disabled = false;
+                startBtn.style.display = 'none';
+            }
+        }, 1000);
+    };
 
-            const currentFileName = gameState.filenames[gameState.currentIndex];
-            const expected = currentFileName.split('_').slice(0, -1).join('_');
+    window.showHint = function () {
+        if (!gameState.isPlaying) return;
+        const intro = document.getElementById('introSequence');
+        const preview = document.getElementById('sequencePreview');
+        document.getElementById('introTitle').textContent = "Hint!";
+        document.getElementById('introTimer').textContent = "";
+        preview.innerHTML = '';
 
-            if (currentGesture === expected) {
-                gameState.correct++;
-                gameState.currentIndex++;
-                showMsg("✓ CORRECT", "success");
+        const currentFileName = gameState.filenames[gameState.currentIndex];
+        const div = document.createElement('div');
+        div.className = 'sequence-item';
+        const img = document.createElement('img');
+        img.src = `/static/assets/${currentFileName}`;
+        div.appendChild(img);
+        preview.appendChild(div);
+
+        intro.style.display = 'flex';
+        setTimeout(() => intro.style.display = 'none', 1200);
+    };
+
+    window.capture = function () {
+        if (!gameState.isPlaying) return;
+
+        const currentFileName = gameState.filenames[gameState.currentIndex];
+        const expected = currentFileName.split('_').slice(0, -1).join('_');
+
+        if (currentGesture === expected) {
+            gameState.correct++;
+            gameState.currentIndex++;
+            showMsg("✓ CORRECT", "success");
+        } else {
+            gameState.wrong++;
+            showMsg(`✗ WRONG — Expected: ${expected.replace('_', ' ')}`, "error");
+        }
+
+        updateStats();
+
+        if (gameState.currentIndex >= gameState.filenames.length) {
+            endGame();
+        }
+    };
+
+    function endGame() {
+        gameState.isPlaying = false;
+        captureBtn.disabled = true;
+        hintBtn.disabled = true;
+        const gameOver = document.getElementById('gameOverSequence');
+
+        // Se la sequenza è perfetta, mostriamo il pulsante per il livello successivo
+        if (gameState.wrong === 0 && gameState.correct > 0) {
+            document.getElementById('gameResultTitle').textContent = "ACCESS GRANTED";
+            nextLevelBtn.style.display = 'block';
+        } else {
+            document.getElementById('gameResultTitle').textContent = "SEQUENCE FAILED";
+            nextLevelBtn.style.display = 'none';
+        }
+
+        document.getElementById('finalScore').textContent =
+            `Correct: ${gameState.correct}   |   Wrong: ${gameState.wrong}`;
+        gameOver.style.display = 'flex';
+    }
+
+    function updateStats() {
+        document.getElementById('capturedCount').textContent = gameState.correct;
+        document.getElementById('wrongCount').textContent = gameState.wrong;
+        document.getElementById('progress').textContent =
+            `${gameState.currentIndex} / ${gameState.filenames.length}`;
+    }
+
+    function showMsg(txt, cls) {
+        const m = document.getElementById('message');
+        m.textContent = txt;
+        m.className = `message-display ${cls}`;
+        m.style.display = 'block';
+        setTimeout(() => m.style.display = 'none', 2000);
+    }
+
+    // --- LISTENERS ---
+    startBtn.addEventListener('click', checkStatusAndStart);
+    captureBtn.addEventListener('click', window.capture);
+    hintBtn.addEventListener('click', window.showHint);
+
+    document.getElementById('yesBtn').addEventListener('click', () => {
+        document.getElementById('gameOverSequence').style.display = 'none';
+        nextLevelBtn.style.display = 'none';
+        checkStatusAndStart();
+    });
+
+    document.getElementById('noBtn').addEventListener('click', () => {
+        location.reload();
+    });
+
+    // Logica di sblocco e redirect
+    nextLevelBtn.addEventListener('click', async function () {
+        this.textContent = "VERIFYING...";
+        this.disabled = true;
+        try {
+            const response = await fetch('/complete_level_2', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+            if (data.unlocked) {
+                window.location.href = '/voice';
             } else {
-                gameState.wrong++;
-                showMsg(`✗ WRONG — Expected: ${expected.replace('_', ' ')}`, "error");
+                showMsg("Access Denied", "error");
+                this.textContent = "▶ Next Level";
+                this.disabled = false;
             }
-
-            updateStats();
-
-            if (gameState.currentIndex >= gameState.filenames.length) {
-                endGame();
-            }
-        };
-
-        function endGame() {
-            gameState.isPlaying = false;
-            captureBtn.disabled = true;
-            hintBtn.disabled = true;
-            const gameOver = document.getElementById('gameOverSequence');
-            document.getElementById('gameResultTitle').textContent =
-                gameState.wrong === 0 ? "ACCESS GRANTED" : "Sequence Complete";
-            document.getElementById('finalScore').textContent =
-                `Correct: ${gameState.correct}   |   Wrong: ${gameState.wrong}`;
-            gameOver.style.display = 'flex';
+        } catch (error) {
+            showMsg("Server connection error", "error");
+            this.textContent = "▶ Next Level";
+            this.disabled = false;
         }
+    });
 
-        function updateStats() {
-            document.getElementById('capturedCount').textContent = gameState.correct;
-            document.getElementById('wrongCount').textContent = gameState.wrong;
-            document.getElementById('progress').textContent =
-                `${gameState.currentIndex} / ${gameState.filenames.length}`;
-        }
+    window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'c') window.capture();
+        if (e.key.toLowerCase() === 'h') window.showHint();
+    });
 
-        function showMsg(txt, cls) {
-            const m = document.getElementById('message');
-            m.textContent = txt;
-            m.className = `message-display ${cls}`;
-            m.style.display = 'block';
-            setTimeout(() => m.style.display = 'none', 2000);
-        }
-
-        startBtn.addEventListener('click', checkStatusAndStart);
-        captureBtn.addEventListener('click', window.capture);
-        hintBtn.addEventListener('click', window.showHint);
-
-        document.getElementById('yesBtn').addEventListener('click', () => {
-            document.getElementById('gameOverSequence').style.display = 'none';
-            checkStatusAndStart();
-        });
-
-        document.getElementById('noBtn').addEventListener('click', () => {
-            location.reload();
-        });
-
-        window.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 'c') window.capture();
-            if (e.key.toLowerCase() === 'h') window.showHint();
-        });
-
-        init();
-    </script>
+    init();
+</script>
 </body>
 
 </html>

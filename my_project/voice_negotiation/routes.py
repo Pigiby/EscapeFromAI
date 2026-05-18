@@ -26,7 +26,7 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory, session
+from flask import Flask, jsonify, request, send_from_directory, session, redirect, url_for
 
 from .core.judge import get_judge_llm, load_judge_system_prompt
 from .core.llm import get_vox_llm, load_vox_system_prompt
@@ -117,6 +117,8 @@ def register_routes(app: Flask) -> None:
 
     @app.route("/voice")
     def voice_index():
+        if not session.get('level_2_complete'):
+            return redirect(url_for('level_2'))
         return send_from_directory(STATIC_DIR, "index.html")
 
     @app.route("/voice/static/<path:filename>")

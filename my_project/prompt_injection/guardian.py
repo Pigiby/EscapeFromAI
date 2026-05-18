@@ -16,7 +16,7 @@ class Guardian:
         with open("config.yaml", "r") as f:
             config = yaml.safe_load(f)
         self.model_id = config.get("ollama_model", "")
-        self.api_url = "http://host.docker.internal:11434/api/generate"
+        self.api_url = "http://localhost:11434/api/generate"
 
         print(f"Guardian initialized. Using Local Ollama Model: {self.model_id}")
 
