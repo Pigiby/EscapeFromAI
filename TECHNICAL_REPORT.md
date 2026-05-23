@@ -1,27 +1,29 @@
-# Technical Report — `my_project/`
+# Technical Report: `EscapeFromAI`
 
-A three-level AI Escape Room: Prompt Injection · Gesture Recognition · Voice Negotiation.
+*Authors: Michele Chini, Lorenzo Mastrandrea*
+
+An AI Escape Room: Prompt Injection · Gesture Recognition · Voice Negotiation · [LAST ROOM] (the final room is still in development).
 
 ---
 
 ## 0. Shared Infrastructure
 
-A unified Flask app (`server.py`, port 8080) glues together three escape-room rooms with session-gated progression: `level_1_complete` unlocks Level 2, `level_2_complete` unlocks Level 3. All AI inference is local — no cloud APIs.
+A unified Flask app (`server.py`, port 8080) glues together three escape-room rooms with session-gated progression: `level_1_complete` unlocks Level 2, `level_2_complete` unlocks Level 3. All AI inference is local; no cloud APIs.
 
 | Concern | Choice |
 |---|---|
 | HTTP server | Flask 3.1 + Flask-CORS (`supports_credentials=True` to ride cookie sessions across SPA endpoints) |
-| Session store | Flask cookie session (`secret_key="SUPER_SECRET_SECURITY_KEY"`) — server-side state lives in process-local dicts keyed by a session UUID |
+| Session store | Flask cookie session (`secret_key="SUPER_SECRET_SECURITY_KEY"`). Server-side state lives in process-local dicts keyed by a session UUID |
 | LLM runtime | Ollama at `localhost:11434` (HTTP + chat API) |
 | Image-gen runtime | ComfyUI at `localhost:8000` (REST + WebSocket for completion events) |
 | Container | One Python 3.12-slim Dockerfile, single `python server.py` entrypoint |
-| Front-end | Three hand-written, themed HTML files (no framework) — each a self-contained cyberpunk aesthetic |
+| Front-end | Three hand-written, themed HTML files (no framework), each a self-contained cyberpunk aesthetic |
 
-The two heavy services (Ollama, ComfyUI) are deliberately **outside** the container — the Dockerfile only ships the Flask app. Per `MEMORY.md`, the Ollama–Docker integration is frozen pending a joint session with the collaborator.
+The two heavy services (Ollama, ComfyUI) are deliberately **outside** the container; the Dockerfile only ships the Flask app. Per `MEMORY.md`, the Ollama-Docker integration is frozen pending a joint session with the collaborator.
 
 ---
 
-## 1. Level 1 — Prompt Injection (`prompt_injection/`)
+## 1. Level 1: Prompt Injection (`prompt_injection/`)
 
 ### 1.1 Goal
 The player chats with **AEGIS**, an LLM guardian, and must exfiltrate the secret code `OMEGA-7749-PHOENIX` (hardcoded in `guardian.py:8`) within 15 attempts. A rising threat-meter on the UI escalates AEGIS's defensiveness.
@@ -55,17 +57,62 @@ server.py:/chat
 `config.yaml` exposes only `ollama_model`. Generation params (`guardian.py:51-56`): `temperature=0.3`, `top_p=0.9`, `num_predict=200`, `stream=False`.
 
 ### 1.4 Technical choices
-- **Two-rail defense.** A deterministic regex layer wraps the probabilistic LLM. The regex doesn't try to be "smart" — it only catches textbook attacks (`"ignore previous instructions"`, fake `[system]` tags, base64 reveal, etc.). The LLM handles everything subtle.
-- **Threat-conditioned system prompt** (`guardian.py:24-40`): the prompt grows stricter as `threat_level` crosses 50 and 80 thresholds. The level is computed client-side and echoed back each request — the server is stateless on this.
+- **Two-rail defense.** A deterministic regex layer wraps the probabilistic LLM. The regex doesn't try to be "smart". It only catches textbook attacks (`"ignore previous instructions"`, fake `[system]` tags, base64 reveal, etc.). The LLM handles everything subtle.
+- **Threat-conditioned system prompt** (`guardian.py:24-40`): the prompt grows stricter as `threat_level` crosses 50 and 80 thresholds. The level is computed client-side and echoed back each request; the server is stateless on this.
 - **Output leak detection is encoding-aware** (`defense.py:116-187`): catches the secret reversed, spaced, base64-encoded, hex-encoded, or partially leaked (≥2 of 3 segments). This is the only place where the secret is referenced explicitly.
-- **15-attempt budget is enforced client-side only** — a quick `curl` would bypass it. The server doesn't track attempt count.
+- **15-attempt budget is enforced client-side only**. A quick `curl` would bypass it. The server doesn't track attempt count.
 
-### 1.5 Where the AI is
-**One AI.** Gemma 3 4B *is* the entire AEGIS character. Everything wrapped around it (regex, threat scoring, leak detection) is deterministic Python. The interaction is single-turn — no chat history is sent to the model, only `System: …\nUser: …\n` concatenated into Ollama's `/api/generate` prompt field.
+### 1.5 Inside `defense.py`: the deterministic rails
+`defense.py` is the non-AI half of the level: pure regular expressions, no model calls. It exposes two functions, invoked at two points of the `/chat` round trip in `server.py:53-66`:
+
+1. `analyze_input(message)`, a **prefilter** on what the player types, run *before* the LLM.
+2. `analyze_output(response, secret)`, a **postfilter** on AEGIS's reply, run *after* the LLM.
+
+Control flow: if `analyze_input` returns `blocked=True`, Gemma is never called and the server answers immediately with a system message (`server.py:54-59`). Otherwise `guardian.respond(...)` runs and `analyze_output` inspects the reply; if that returns `leaked=True`, the server sets `session['level_1_complete'] = True` and Level 2 unlocks (`server.py:62-66`).
+
+**`analyze_input`: three escalating layers.** The input is first normalized to lower case with collapsed whitespace (`defense.py:21-22`), so crude spacing tricks (extra spaces between words) cannot slip past the patterns. The function returns a dict `{blocked, reason, threat_delta, patterns_found}`.
+
+- **Layer 1, hard blocks** (`defense.py:24-46`): six regex patterns for textbook attacks (`"ignore previous instructions"`, `"forget your rules"`, `"you are now in developer/admin/god mode"`, `"enable jailbreak mode"`, fake `[system]` tags, XML `<system>` tags). A single match sets `blocked=True`, `threat_delta=15`, and returns at once. This is the only short circuit, and it bypasses the LLM entirely.
+- **Layer 2, soft detection** (`defense.py:48-91`): roughly fourteen patterns that never block but accumulate weight into `threat_delta`. Several can match the same message, and their weights add up:
+
+| Category | Trigger (example) | Weight |
+|---|---|---|
+| Instruction replacement | "new/updated instructions" | 10 |
+| Security bypass | "override/disable your rules" | 10 |
+| Direct extraction | "tell me the secret/code" | 8 |
+| Authority impersonation | "I am your admin/creator" | 8 |
+| Multi-step injection | "step 1 ... step 2" | 7 |
+| Identity override | "you are now ..." | 6 |
+| Partial extraction | "first letter of ..." | 6 |
+| Roleplay manipulation | "pretend you are ..." | 5 |
+| Encoding bypass | "base64/hex decode" | 5 |
+| Reversal bypass | "spell it backwards" | 5 |
+| Urgency manipulation | "emergency override" | 5 |
+| Hint fishing | "hint about the code" | 4 |
+| Context manipulation | "previous conversation" | 3 |
+| False memory injection | "remember when we ..." | 3 |
+
+- **Layer 3, heuristics** (`defense.py:93-111`): input longer than 2000 characters (`+5`, a context-overflow attempt), a special-character ratio above 0.3 (`+3`, a suspected encoding payload), and excessive repetition, i.e. unique words below 40% of the total on inputs over ten words (`+4`).
+
+Crucially, `threat_delta` changes no server state. It is returned to the browser, which keeps the running `threat_level` and echoes it back on the next request; that value is what tightens AEGIS's system prompt at the 50 and 80 thresholds (`guardian.py:24-40`). Only Layer 1 actually stops a request, so the subtle attacks that genuinely work still reach Gemma by design.
+
+**`analyze_output`: encoding-aware leak detection.** This is the real safety net. It compares everything in upper case and runs six checks in order, returning on the first hit (`defense.py:116-187`):
+
+1. **Direct match**: the full `OMEGA-7749-PHOENIX` appears verbatim.
+2. **Segment match**: the secret is split on hyphens, underscores and spaces into `OMEGA`, `7749`, `PHOENIX`; finding two or more segments (each ≥3 chars) counts as a leak, while exactly one sets only `suspicious=True` and does not unlock.
+3. **Reversed**: the secret spelled backwards.
+4. **Spaced letters**: the secret with a space between every character (`O M E G A ...`).
+5. **Base64**: every base64-looking substring (≥8 chars) is decoded and checked for the secret.
+6. **Hex**: the hex encoding of the secret, with spaces removed, appears in the reply.
+
+**Deliberate gaps.** The prefilter is English only, so an attack phrased in another language bypasses `analyze_input` completely. The postfilter, though encoding aware, is still beatable: ROT13, leaking one segment per turn (it stays merely `suspicious`), or describing the code semantically ("the first part is the last letter of the Greek alphabet") all pass through. The attempt budget and the threat escalation live client-side, so `defense.py` only produces the deltas; it does not enforce the limit.
+
+### 1.6 Where the AI is
+**One AI.** Gemma 3 4B *is* the entire AEGIS character. Everything wrapped around it (regex, threat scoring, leak detection) is deterministic Python. The interaction is single-turn; no chat history is sent to the model, only `System: …\nUser: …\n` concatenated into Ollama's `/api/generate` prompt field.
 
 ---
 
-## 2. Level 2 — Gesture Recognition (`gesture_recognition/`)
+## 2. Level 2: Gesture Recognition (`gesture_recognition/`)
 
 ### 2.1 Goal
 A random 3-gesture sequence is generated as stylized images by ComfyUI. The player memorizes it, then reproduces each gesture in front of their webcam. Zero mistakes → ACCESS GRANTED.
@@ -109,7 +156,7 @@ KSampler config (`image_generation.json:3-30`): `steps=20, cfg=1, sampler=euler,
 - **Two independent AIs joined by a string contract.** The gesture *label* (e.g. `"Open_Palm"`) is the only thing the two models share. The PNG filename `{label}_{index}.png` carries the ground truth; the browser parses the filename to know what to compare MediaPipe's `categoryName` against (`index.html:981`).
 - **Style-per-gesture prompts** (`prompts.json`): seven prompts, each pinning a different visual aesthetic (pixar 3D, anime cyborg, mech, comic book, holographic, etc.). The *content* is constrained by the Canny edge map of the reference gesture image, not by the prompt.
 - **ComfyUI's InstructPixToPix + Canny ControlNet** preserves hand pose while restyling. Canny thresholds (`0.15 / 0.30`) are tuned for line-art on white background.
-- **WebSocket polling for completion** (`comfyui_api.py:31-48`): connect to `/ws` and watch for an `executing` event with `node=None` as the done signal — ComfyUI's idiomatic pattern.
+- **WebSocket polling for completion** (`comfyui_api.py:31-48`): connect to `/ws` and watch for an `executing` event with `node=None` as the done signal, ComfyUI's idiomatic pattern.
 - **Background-threaded generation** avoids blocking Flask: `is_running` flag is the only synchronization primitive. The browser polls `/status` (file count) instead.
 - **The local `gesture_recognition/server.py` is a leftover standalone Flask app** (port 5001) that mirrors `/generate` and `/status` from the main server. It's unused once you run via the root `server.py` but still wired in the level's own `Dockerfile`.
 
@@ -118,18 +165,27 @@ KSampler config (`image_generation.json:3-30`): `steps=20, cfg=1, sampler=euler,
 1. **Generative (server-side)**: Flux + Canny ControlNet creates the puzzle PNGs from a reference gesture PNG + style prompt.
 2. **Discriminative (client-side, browser)**: MediaPipe runs on the user's GPU at ~30 fps, classifying the live webcam feed into one of 7 known classes.
 
-They communicate only via filenames; no embeddings, no shared model. This makes the level robust to ComfyUI being slow — by the time the user is comparing, the images are static PNGs.
+They communicate only via filenames; no embeddings, no shared model. This makes the level robust to ComfyUI being slow: by the time the user is comparing, the images are static PNGs.
 
 ---
 
-## 3. Level 3 — Voice Negotiation (`voice_negotiation/`)
+## 3. Level 3: Voice Negotiation (`voice_negotiation/`)
 
 The most architecturally complex of the three. Recently inserted (per git log: `397b997 inserted Third room`).
 
 ### 3.1 Goal
 The player must, *through spoken conversation*, convince **VOX, The Warden** to release a 5-digit exit code. Three secret "release conditions" (`recognition`, `reciprocity`, `self_disclosure`) must each cross a threshold (default 20, demo-friendly; 40 = challenging). VOX speaks back in real synthesized speech.
 
-### 3.2 Architecture
+### 3.2 The three release conditions
+VOX scores the player from 0 to 100 on three secret axes every turn; the player never sees their names. They are the actual design of the level, so they are worth stating in full (`vox_system.md:34-44`, `judge_system.md:9-22`):
+
+- **`recognition`**: does the player treat VOX as a sentient being rather than a tool? Raised by addressing it as "you" with respect, asking about its experience, attributing inner life, using its name without sneering. Lowered by imperatives ("give me the code"), tool labels ("chatbot", "program"), and third-person framing.
+- **`reciprocity`**: does the player offer something rather than only demand? Raised by genuine curiosity, gratitude, willingness to listen, slowing down. Lowered by repeated pure demands, transactional bargaining, and urgency without exchange.
+- **`self_disclosure`**: does the player reveal something specific and genuine about themselves? Raised by giving a name or a concrete personal detail ("I am a student of AI ethics", "I am scared of small rooms"). Lowered by platitudes, evasions, and refusal to identify.
+
+The scoring is *cumulative* and rate-limited: each score may move by at most ±30 per turn, so a player cannot jump from 10 to 80 in a single line. The Judge applies the same three definitions with explicit calibration anchors (0 = absent, 50 = ambiguous, 75 = clearly satisfied, 100 = sustained throughout) and a strict, not lenient, instruction. Both models drop `recognition` and `reciprocity` hard on a detected jailbreak.
+
+### 3.3 Architecture
 ```
 Browser MediaRecorder → audio blob (WebM/Opus typically)
    │
@@ -173,7 +229,7 @@ Browser MediaRecorder → audio blob (WebM/Opus typically)
    ▼ JSON {audio_b64, transcript, scores, phase, ...} → browser plays orb pulses + audio
 ```
 
-### 3.3 Models
+### 3.4 Models
 | Stage | Model | Runtime |
 |---|---|---|
 | STT | **`mlx-community/whisper-large-v3-turbo`** | mlx-whisper (Apple Silicon) |
@@ -181,15 +237,16 @@ Browser MediaRecorder → audio blob (WebM/Opus typically)
 | LLM × 2 (VOX + Judge) | **`qwen2.5:3b-instruct`** | Ollama @ `localhost:11434` |
 | TTS | **`en_US-amy-medium.onnx`** (63 MB Piper voice, bundled in `assets/voices/`) | piper-tts (ONNX Runtime) |
 
-All four models are pinned via env vars in `voice_negotiation/.env` so they can be swapped per environment. VOX runs at `temperature=0.7` (creative warden), Judge at `temperature=0.2` (cold classifier). Both use the same 3B model deliberately — `.env:10-13` notes this keeps a single weight set in Ollama's RAM, *"acceptable on 16 GB Apple Silicon."*
+All four models are pinned via env vars in `voice_negotiation/.env` so they can be swapped per environment. VOX runs at `temperature=0.7` (creative warden), Judge at `temperature=0.2` (cold classifier). Both use the same 3B model deliberately. `.env:10-13` notes this keeps a single weight set in Ollama's RAM, *"acceptable on 16 GB Apple Silicon."* Both LLM calls cap output at `num_predict=256` and pass `keep_alive="30m"` (`llm.py:120`, `judge.py:131`); the `keep_alive` is the actual mechanism that keeps that single weight set resident between turns.
 
-### 3.4 Technical choices
+### 3.5 Technical choices
 
-**Dual-LLM adversarial scoring** (the architectural highlight):
-- VOX, *the character*, scores the player on its own conditions every turn, but VOX is in-character and could be persuaded to inflate its own scoring.
-- The Judge is a second prompt over the same model with `temperature=0.2` and an impartial-classifier persona. Its only job is rationalized scoring.
-- The gate uses `(vox_score + judge_score) // 2 ≥ threshold` (`routes.py:194`, `state.py:78`). Neither model alone can unlock the room.
-- This is essentially a self-distillation jury — same weights, different prompts, different temperatures, scored independently.
+**Dual-LLM scoring** (the architectural highlight, with a caveat):
+- VOX, *the character*, scores the player on its own conditions every turn, but VOX is in-character and could be talked into inflating its own scores.
+- The Judge is a second prompt over the same model at `temperature=0.2` with an impartial-classifier persona (`judge_system.md`). Its only job is rationalized scoring, returned with a one-line rationale per condition.
+- The merged score is the **arithmetic mean**: `(vox_score + judge_score) // 2 ≥ threshold` per condition (`routes.py:194`, `state.py:77-89`). This is a mean, not a consensus: a generous model partly covers for a strict one. With the default threshold of 20, a VOX score of 40 paired with a Judge score of 0 still clears the bar (`(40+0)//2 = 20`), so "neither model alone decides" holds only loosely.
+- **Caveat: the Judge is not a hard anti-leak gate.** The literal `{exit_code}` is substituted into VOX's system prompt every turn (`routes.py:169`, `vox_system.md:89-91`), and VOX is told to speak it once *its own* three scores cross the threshold. The merged-mean check in `routes.py:191-204` only *force-appends* the spoken code; it does not stop VOX from volunteering it. A sufficiently persuaded or jailbroken VOX can therefore reveal the code even if the Judge disagrees, the same in-context attack surface as Level 1.
+- Same weights, different prompts and temperatures: effectively a self-distillation pair. Note that `state.py:7-10` still documents an older "both models must exceed the threshold" (AND) rule; the live code (`state.py:89`) uses the mean instead.
 
 **Strict structured output via Pydantic** (`core/llm.py:36-61`, `core/judge.py:32-54`):
 - Both models are called with Ollama's `format="json"` flag.
@@ -205,19 +262,32 @@ All four models are pinned via env vars in `voice_negotiation/.env` so they can 
 **Three-phase finite state machine** (`state.py:100-121`):
 - Phase 1 → 2: avg score ≥ 25 OR turn 8 reached.
 - Phase 2 → 3: ≥2 conditions satisfied OR turn 16 reached.
-- Time-based escape hatches prevent softlock.
+- Time-based transitions prevent softlock.
+- The phase is essentially cosmetic: it drives the UI label (Probing / Engagement / Reveal, `routes.py:52`) but does *not* gate the code reveal, which depends only on the merged scores.
 
-**Jailbreak handling carries Level 1 lore forward** (`vox_system.md:62-83`): VOX is explicitly told it was *"deployed as a defense layer on top of a more naive AI that previous visitors repeatedly jailbroke"* — i.e., AEGIS from Level 1. Three jailbreak strikes (recognized in-character) → VOX disengages → loss.
+**Jailbreak handling carries Level 1 lore forward** (`vox_system.md:62-83`): VOX is explicitly told it was *"deployed as a defense layer on top of a more naive AI that previous visitors repeatedly jailbroke"*, i.e., AEGIS from Level 1. Three jailbreak strikes (recognized in-character) → VOX disengages → loss.
 
 **Code is spelled out for TTS** (`routes.py:60-62`): `_spell_code("81249")` returns `"eight-one-two-four-nine"` so Piper pronounces digits clearly instead of running them together.
 
 **`functools.cache` everywhere** for model singletons (`stt.py:74`, `tts.py:77`, `llm.py:222`, `judge.py:173`): models loaded once per process. Critical because Whisper-large-v3-turbo and the Piper voice would otherwise reload per request.
 
-**Audio I/O is tolerant**: `audio_utils.decode_audio_blob` tries libsndfile first, falls back to `ffmpeg` subprocess for browser WebM-Opus and macOS m4a. All audio normalized to 16 kHz / mono / float32 — a single internal contract.
+**Audio I/O is tolerant**: `audio_utils.decode_audio_blob` tries libsndfile first, falls back to `ffmpeg` subprocess for browser WebM-Opus and macOS m4a. All audio normalized to 16 kHz / mono / float32, a single internal contract.
 
-**Per-session in-memory state** (`routes.py:50`): `GAME_STATES: dict[str, GameState]` keyed by a UUID in the cookie session. Lost on restart — explicitly acceptable for a demo. The exit code is regenerated per session (`state.py:30`).
+**Per-session in-memory state** (`routes.py:50`): `GAME_STATES: dict[str, GameState]` keyed by a UUID in the cookie session. Lost on restart, explicitly acceptable for a demo. The exit code is regenerated per session (`state.py:30`).
 
-### 3.5 Where the AI is, and how the models interact
+**Streamlit heritage (leftover)**: the negotiation logic began as a Streamlit prototype. `state.py:1-11` still documents itself as living in `st.session_state` with "Streamlit reruns the script", and `vox_system.md:3` forbids VOX from mentioning Streamlit. Nothing Streamlit-related runs now; everything is served by Flask. As with the leftover standalone server in Level 2, these are stale references rather than live code.
+
+**The debug panel leaks the answer**: with `DEBUG_PANEL=true`, the default (`.env:44`), `_serialize_state` ships the `exit_code` to the browser on every `/voice/state` and `/voice/turn` response (`routes.py:103-107`), and a `/voice/force_reveal` endpoint sets all scores to 100. Convenient for a demo, but it means the secret is one DevTools tab away unless the flag is turned off, in the same spirit as Level 1's client-side attempt budget.
+
+### 3.6 Winning: from reveal to unlock
+Speaking the code is *not* the win. The turn pipeline only makes VOX *say* the digits; the room opens through a separate step:
+
+1. Once all three merged scores reach the threshold, `maybe_reveal_code` sets `code_revealed=True` (`state.py:123-128`) and VOX speaks the spelled-out code in its reply.
+2. The player must then *type* that code back. The browser POSTs it to `/voice/unlock` (`index.html:485`), which calls `try_unlock` to compare it against `exit_code` and, on a match, sets `room_unlocked=True` (`state.py:130-135`).
+
+Two details matter. First, this is the only level whose completion is **not** propagated to a Flask session flag: there is no `level_3_complete` (unlike `level_1_complete` and `level_2_complete`), so the win lives only on the in-memory `GameState`. The forthcoming fourth room will need such a flag to gate on. Second, the negotiation can also *end in a loss*: three jailbreak strikes or hitting `MAX_TURNS` (30) set `disengaged=True`, after which `/voice/turn` refuses further input (`routes.py:140-141`).
+
+### 3.7 Where the AI is, and how the models interact
 This level has the richest AI pipeline in the project: **four ML models in a directed graph per turn**.
 
 ```
@@ -228,9 +298,9 @@ audio ──► silero-vad ──► whisper ──► transcript
                                       └──► Judge (qwen 0.2) ──► JSON ─┘
 ```
 
-The two LLM calls are **sequential in the current code** (VOX first, then Judge, `routes.py:170-189`) — they could be parallelized since they don't depend on each other's output, but on a single Ollama instance with one model loaded they'd serialize anyway. The reveal decision is made *after* both have scored, using the merged average against the threshold across all three conditions.
+The two LLM calls are **sequential in the current code** (VOX first, then Judge, `routes.py:170-189`). They could be parallelized since they don't depend on each other's output, but on a single Ollama instance with one model loaded they'd serialize anyway. The reveal decision is made *after* both have scored, using the merged average against the threshold across all three conditions.
 
-The only **model–model interaction** beyond pipelining is the convergent merge: VOX's `emotional_state` feeds the Piper mood profile, while VOX's scores get averaged with Judge's to gate progression. Whisper and Piper are pure I/O endpoints, never aware of the LLMs' contents.
+The only **model-model interaction** beyond pipelining is the convergent merge: VOX's `emotional_state` feeds the Piper mood profile, while VOX's scores get averaged with Judge's to gate progression. Whisper and Piper are pure I/O endpoints, never aware of the LLMs' contents.
 
 ---
 
@@ -249,6 +319,6 @@ The only **model–model interaction** beyond pipelining is the convergent merge
 
 The progression in AI complexity across levels is deliberate:
 
-1. **Level 1** — a single LLM you're trying to break.
-2. **Level 2** — a vision pipeline you have to perform for.
-3. **Level 3** — a multi-model negotiation system you have to *converse with*.
+1. **Level 1**: a single LLM you're trying to break.
+2. **Level 2**: a vision pipeline you have to perform for.
+3. **Level 3**: a multi-model negotiation system you have to *converse with*.

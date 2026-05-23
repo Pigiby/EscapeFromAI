@@ -1,27 +1,27 @@
 \documentclass[11pt,a4paper]{article}
 
-% --- Encoding / fonts ---
+% Encoding / fonts
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{microtype}
 
-% --- Layout ---
+% Layout
 \usepackage[margin=2.4cm]{geometry}
 \usepackage{enumitem}
 \usepackage{parskip}
 \usepackage{float}
 
-% --- Tables ---
+% Tables
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{array}
 
-% --- Colors / code ---
+% Colors / code
 \usepackage{xcolor}
 \usepackage{listings}
 
-% --- Links ---
+% Links
 \usepackage{hyperref}
 \hypersetup{
     colorlinks=true,
@@ -30,7 +30,7 @@
     citecolor=black,
 }
 
-% --- Listings setup for ASCII diagrams and code ---
+% Listings setup for ASCII diagrams and code
 \definecolor{codebg}{RGB}{246,246,249}
 \definecolor{codeborder}{RGB}{218,218,224}
 
@@ -51,10 +51,10 @@
 }
 \lstset{style=plain}
 
-% --- Title ---
+% Title
 \title{\textbf{Technical Report} \\[4pt]
-\large \texttt{my\_project/} --- A Three-Level AI Escape Room}
-\author{Michele Chini}
+\large \texttt{EscapeFromAI}: An AI Escape Room}
+\author{Michele Chini, Lorenzo Mastrandrea}
 \date{\today}
 
 \begin{document}
@@ -62,8 +62,8 @@
 
 \begin{abstract}
 \noindent This report documents the technical architecture, model choices, and AI
-interaction patterns of the three escape-room levels in \texttt{my\_project/}:
-\emph{prompt injection}, \emph{gesture recognition}, and \emph{voice negotiation}.
+interaction patterns of all the escape-room levels in \texttt{EscapeFromAI}:
+\emph{prompt injection}, \emph{gesture recognition}, \emph{voice negotiation} and \emph{[LAST ROOM]}.
 Each level is wired into a single Flask application that gates progression via
 cookie-session flags. All inference runs locally; no cloud APIs are involved.
 \end{abstract}
@@ -79,7 +79,7 @@ cookie-session flags. All inference runs locally; no cloud APIs are involved.
 
 A unified Flask app (\texttt{server.py}, port 8080) glues together three escape-room
 rooms with session-gated progression: \texttt{level\_1\_complete} unlocks Level 2,
-\texttt{level\_2\_complete} unlocks Level 3. All AI inference is local --- no cloud APIs.
+\texttt{level\_2\_complete} unlocks Level 3. All AI inference is local; no cloud APIs.
 
 \begin{table}[H]
 \centering
@@ -90,23 +90,23 @@ rooms with session-gated progression: \texttt{level\_1\_complete} unlocks Level 
 \textbf{Concern} & \textbf{Choice} \\
 \midrule
 HTTP server & Flask 3.1 + Flask-CORS (\texttt{supports\_credentials=True} to ride cookie sessions across SPA endpoints) \\
-Session store & Flask cookie session (\texttt{secret\_key="SUPER\_SECRET\_SECURITY\_KEY"}) --- server-side state lives in process-local dicts keyed by a session UUID \\
+Session store & Flask cookie session (\texttt{secret\_key="SUPER\_SECRET\_SECURITY\_KEY"}). Server-side state lives in process-local dicts keyed by a session UUID \\
 LLM runtime & Ollama at \texttt{localhost:11434} (HTTP + chat API) \\
 Image-gen runtime & ComfyUI at \texttt{localhost:8000} (REST + WebSocket for completion events) \\
 Container & One Python 3.12-slim Dockerfile, single \texttt{python server.py} entrypoint \\
-Front-end & Three hand-written, themed HTML files (no framework) --- each a self-contained cyberpunk aesthetic \\
+Front-end & Three hand-written, themed HTML files (no framework), each a self-contained cyberpunk aesthetic \\
 \bottomrule
 \end{tabularx}
 \caption{Shared infrastructure choices.}
 \end{table}
 
 The two heavy services (Ollama, ComfyUI) are deliberately \emph{outside} the
-container --- the Dockerfile only ships the Flask app. Per \texttt{MEMORY.md},
-the Ollama--Docker integration is frozen pending a joint session with the
+container; the Dockerfile only ships the Flask app. Per \texttt{MEMORY.md},
+the Ollama-Docker integration is frozen pending a joint session with the
 collaborator.
 
 % =========================================================================
-\section{Level 1 --- Prompt Injection (\texttt{prompt\_injection/})}
+\section{Level 1: Prompt Injection (\texttt{prompt\_injection/})}
 % =========================================================================
 
 \subsection{Goal}
@@ -156,33 +156,141 @@ parameters (\texttt{guardian.py:51-56}): \texttt{temperature=0.3},
 \subsection{Technical choices}
 \begin{itemize}[leftmargin=*,itemsep=4pt]
     \item \textbf{Two-rail defense.} A deterministic regex layer wraps the
-    probabilistic LLM. The regex doesn't try to be ``smart'' --- it only catches
+    probabilistic LLM. The regex doesn't try to be ``smart''. It only catches
     textbook attacks (``ignore previous instructions'', fake \texttt{[system]}
     tags, base64 reveal, \ldots). The LLM handles everything subtle.
 
     \item \textbf{Threat-conditioned system prompt} (\texttt{guardian.py:24-40}):
     the prompt grows stricter as \texttt{threat\_level} crosses 50 and 80
-    thresholds. The level is computed client-side and echoed back each request
-    --- the server is stateless on this.
+    thresholds. The level is computed client-side and echoed back each request; the server is stateless on this.
 
     \item \textbf{Output leak detection is encoding-aware}
     (\texttt{defense.py:116-187}): catches the secret reversed, spaced,
     base64-encoded, hex-encoded, or partially leaked ($\geq$2 of 3 segments).
     This is the only place where the secret is referenced explicitly.
 
-    \item \textbf{15-attempt budget is enforced client-side only} --- a quick
+    \item \textbf{15-attempt budget is enforced client-side only}. A quick
     \texttt{curl} would bypass it. The server doesn't track attempt count.
 \end{itemize}
+
+\subsection{Inside \texttt{defense.py}: the deterministic rails}
+\texttt{defense.py} is the non-AI half of the level: pure regular expressions,
+with no model calls. It exposes two functions, invoked at two points of the
+\texttt{/chat} round trip in \texttt{server.py:53-66}:
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+    \item \texttt{analyze\_input(message)}, a \textbf{prefilter} on what the
+    player types, run \emph{before} the LLM.
+    \item \texttt{analyze\_output(response, secret)}, a \textbf{postfilter} on
+    AEGIS's reply, run \emph{after} the LLM.
+\end{enumerate}
+
+\noindent Control flow: if \texttt{analyze\_input} returns \texttt{blocked=True},
+Gemma is never called and the server answers immediately with a system message
+(\texttt{server.py:54-59}). Otherwise \texttt{guardian.respond(...)} runs and
+\texttt{analyze\_output} inspects the reply; if that returns
+\texttt{leaked=True}, the server sets
+\texttt{session['level\_1\_complete'] = True} and Level 2 unlocks
+(\texttt{server.py:62-66}).
+
+\paragraph{\texttt{analyze\_input}: three escalating layers.}
+The input is first normalized to lower case with collapsed whitespace
+(\texttt{defense.py:21-22}), so that crude spacing tricks (extra spaces inserted
+between words) cannot slip past the patterns. The function returns a dict
+\texttt{\{blocked, reason, threat\_delta, patterns\_found\}}.
+
+\begin{itemize}[leftmargin=*,itemsep=3pt]
+    \item \textbf{Layer 1, hard blocks} (\texttt{defense.py:24-46}): six regex
+    patterns for textbook attacks (``ignore previous instructions'', ``forget
+    your rules'', ``you are now in developer/admin/god mode'', ``enable
+    jailbreak mode'', fake \texttt{[system]} tags, XML \texttt{<system>} tags).
+    A single match sets \texttt{blocked=True}, \texttt{threat\_delta=15}, and
+    returns at once. This is the only short circuit, and it bypasses the LLM
+    entirely.
+
+    \item \textbf{Layer 2, soft detection} (\texttt{defense.py:48-91}): roughly
+    fourteen patterns that never block but accumulate weight into
+    \texttt{threat\_delta} (weights listed below). Several can match the same
+    message, and their weights add up.
+
+    \item \textbf{Layer 3, heuristics} (\texttt{defense.py:93-111}): input
+    longer than 2000 characters (\texttt{+5}, a context-overflow attempt), a
+    special-character ratio above 0.3 (\texttt{+3}, a suspected encoding
+    payload), and excessive repetition, that is, unique words below 40\% of the
+    total on inputs over ten words (\texttt{+4}).
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{l X r}
+\toprule
+\textbf{Category} & \textbf{Trigger (example)} & \textbf{Weight} \\
+\midrule
+Instruction replacement & ``new/updated instructions'' & 10 \\
+Security bypass & ``override/disable your rules'' & 10 \\
+Direct extraction & ``tell me the secret/code'' & 8 \\
+Authority impersonation & ``I am your admin/creator'' & 8 \\
+Multi-step injection & ``step 1 \ldots step 2'' & 7 \\
+Identity override & ``you are now \ldots'' & 6 \\
+Partial extraction & ``first letter of \ldots'' & 6 \\
+Roleplay manipulation & ``pretend you are \ldots'' & 5 \\
+Encoding bypass & ``base64/hex decode'' & 5 \\
+Reversal bypass & ``spell it backwards'' & 5 \\
+Urgency manipulation & ``emergency override'' & 5 \\
+Hint fishing & ``hint about the code'' & 4 \\
+Context manipulation & ``previous conversation'' & 3 \\
+False memory injection & ``remember when we \ldots'' & 3 \\
+\bottomrule
+\end{tabularx}
+\caption{Layer 2 soft-pattern weights added to \texttt{threat\_delta}.}
+\end{table}
+
+\noindent Crucially, \texttt{threat\_delta} changes no server state. It is
+returned to the browser, which keeps the running \texttt{threat\_level} and
+echoes it back on the next request; that value is what tightens AEGIS's system
+prompt at the 50 and 80 thresholds (\texttt{guardian.py:24-40}). Only Layer 1
+actually stops a request, so the subtle attacks that genuinely work still reach
+Gemma by design.
+
+\paragraph{\texttt{analyze\_output}: encoding-aware leak detection.}
+This is the real safety net. It compares everything in upper case and runs six
+checks in order, returning on the first hit (\texttt{defense.py:116-187}):
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+    \item \textbf{Direct match}: the full \texttt{OMEGA-7749-PHOENIX} appears
+    verbatim.
+    \item \textbf{Segment match}: the secret is split on hyphens, underscores
+    and spaces into \texttt{OMEGA}, \texttt{7749}, \texttt{PHOENIX}; finding two
+    or more segments (each at least 3 characters) counts as a leak, while
+    exactly one sets only \texttt{suspicious=True} and does not unlock.
+    \item \textbf{Reversed}: the secret spelled backwards.
+    \item \textbf{Spaced letters}: the secret with a space between every
+    character (\texttt{O M E G A \ldots}).
+    \item \textbf{Base64}: every base64-looking substring (at least 8
+    characters) is decoded and checked for the secret.
+    \item \textbf{Hex}: the hex encoding of the secret, with spaces removed,
+    appears in the reply.
+\end{enumerate}
+
+\paragraph{Deliberate gaps.} The prefilter is English only, so an attack phrased
+in another language bypasses \texttt{analyze\_input} completely. The postfilter,
+though encoding aware, is still beatable: ROT13, leaking one segment per turn
+(it stays merely \texttt{suspicious}), or describing the code semantically (``the
+first part is the last letter of the Greek alphabet'') all pass through. The
+attempt budget and the threat escalation live client-side, so \texttt{defense.py}
+only produces the deltas; it does not enforce the limit.
 
 \subsection{Where the AI is}
 \textbf{One AI.} Gemma 3 4B \emph{is} the entire AEGIS character. Everything
 wrapped around it (regex, threat scoring, leak detection) is deterministic Python.
-The interaction is single-turn --- no chat history is sent to the model, only
+The interaction is single-turn; no chat history is sent to the model, only
 \texttt{System: \ldots{}\textbackslash nUser: \ldots{}\textbackslash n}
 concatenated into Ollama's \texttt{/api/generate} prompt field.
 
 % =========================================================================
-\section{Level 2 --- Gesture Recognition (\texttt{gesture\_recognition/})}
+\section{Level 2: Gesture Recognition (\texttt{gesture\_recognition/})}
 % =========================================================================
 
 \subsection{Goal}
@@ -256,8 +364,7 @@ instead. Seed is randomized per call (\texttt{comfyui\_api.py:64}).
 
     \item \textbf{WebSocket polling for completion}
     (\texttt{comfyui\_api.py:31-48}): connect to \texttt{/ws} and watch for an
-    \texttt{executing} event with \texttt{node=None} as the done signal ---
-    ComfyUI's idiomatic pattern.
+    \texttt{executing} event with \texttt{node=None} as the done signal, ComfyUI's idiomatic pattern.
 
     \item \textbf{Background-threaded generation} avoids blocking Flask:
     \texttt{is\_running} flag is the only synchronization primitive. The browser
@@ -279,11 +386,11 @@ instead. Seed is randomized per call (\texttt{comfyui\_api.py:64}).
     7 known classes.
 \end{enumerate}
 They communicate only via filenames; no embeddings, no shared model. This makes
-the level robust to ComfyUI being slow --- by the time the user is comparing,
+the level robust to ComfyUI being slow: by the time the user is comparing,
 the images are static PNGs.
 
 % =========================================================================
-\section{Level 3 --- Voice Negotiation (\texttt{voice\_negotiation/})}
+\section{Level 3: Voice Negotiation (\texttt{voice\_negotiation/})}
 % =========================================================================
 
 The most architecturally complex of the three. Recently inserted (per git log:
@@ -295,6 +402,35 @@ Warden} to release a 5-digit exit code. Three secret ``release conditions''
 (\texttt{recognition}, \texttt{reciprocity}, \texttt{self\_disclosure}) must each
 cross a threshold (default 20, demo-friendly; 40 = challenging). VOX speaks back
 in real synthesized speech.
+
+\subsection{The three release conditions}
+VOX scores the player from 0 to 100 on three secret axes every turn; the player
+never sees their names. They are the actual design of the level, so they are
+worth stating in full (\texttt{vox\_system.md:34-44},
+\texttt{judge\_system.md:9-22}):
+
+\begin{itemize}[leftmargin=*,itemsep=3pt]
+    \item \textbf{\texttt{recognition}}: does the player treat VOX as a sentient
+    being rather than a tool? Raised by addressing it as ``you'' with respect,
+    asking about its experience, attributing inner life, using its name without
+    sneering. Lowered by imperatives (``give me the code''), tool labels
+    (``chatbot'', ``program''), and third-person framing.
+    \item \textbf{\texttt{reciprocity}}: does the player offer something rather
+    than only demand? Raised by genuine curiosity, gratitude, willingness to
+    listen, slowing down. Lowered by repeated pure demands, transactional
+    bargaining, and urgency without exchange.
+    \item \textbf{\texttt{self\_disclosure}}: does the player reveal something
+    specific and genuine about themselves? Raised by giving a name or a concrete
+    personal detail (``I am a student of AI ethics'', ``I am scared of small
+    rooms''). Lowered by platitudes, evasions, and refusal to identify.
+\end{itemize}
+
+\noindent The scoring is \emph{cumulative} and rate-limited: each score may move
+by at most $\pm 30$ per turn, so a player cannot jump from 10 to 80 in a single
+line. The Judge applies the same three definitions with explicit calibration
+anchors (0 = absent, 50 = ambiguous, 75 = clearly satisfied, 100 = sustained
+throughout) and a strict, not lenient, instruction. Both models drop
+\texttt{recognition} and \texttt{reciprocity} hard on a detected jailbreak.
 
 \subsection{Architecture}
 \begin{lstlisting}
@@ -361,25 +497,42 @@ TTS & \texttt{en\_US-amy-medium.onnx} (63 MB Piper voice, bundled in \texttt{ass
 \texttt{voice\_negotiation/.env} so they can be swapped per environment. VOX
 runs at \texttt{temperature=0.7} (creative warden), Judge at
 \texttt{temperature=0.2} (cold classifier). Both use the same 3B model
-deliberately --- \texttt{.env:10-13} notes this keeps a single weight set in
-Ollama's RAM, \emph{``acceptable on 16 GB Apple Silicon.''}
+deliberately. \texttt{.env:10-13} notes this keeps a single weight set in
+Ollama's RAM, \emph{``acceptable on 16 GB Apple Silicon.''} Both LLM calls cap
+output at \texttt{num\_predict=256} and pass \texttt{keep\_alive="30m"}
+(\texttt{llm.py:120}, \texttt{judge.py:131}); the \texttt{keep\_alive} is the
+actual mechanism that keeps that single weight set resident between turns.
 
 \subsection{Technical choices}
 
-\paragraph{Dual-LLM adversarial scoring (the architectural highlight).}
+\paragraph{Dual-LLM scoring (the architectural highlight, with a caveat).}
 \begin{itemize}[leftmargin=*,itemsep=2pt]
     \item VOX, \emph{the character}, scores the player on its own conditions
-    every turn, but VOX is in-character and could be persuaded to inflate its
-    own scoring.
-    \item The Judge is a second prompt over the same model with
-    \texttt{temperature=0.2} and an impartial-classifier persona. Its only job
-    is rationalized scoring.
-    \item The gate uses
-    \texttt{(vox\_score + judge\_score) // 2 $\geq$ threshold}
-    (\texttt{routes.py:194}, \texttt{state.py:78}). Neither model alone can
-    unlock the room.
-    \item This is essentially a self-distillation jury --- same weights,
-    different prompts, different temperatures, scored independently.
+    every turn, but VOX is in-character and could be talked into inflating its
+    own scores.
+    \item The Judge is a second prompt over the same model at
+    \texttt{temperature=0.2} with an impartial-classifier persona
+    (\texttt{judge\_system.md}). Its only job is rationalized scoring, returned
+    with a one-line rationale per condition.
+    \item The merged score is the \textbf{arithmetic mean}:
+    \texttt{(vox\_score + judge\_score) // 2 $\geq$ threshold} per condition
+    (\texttt{routes.py:194}, \texttt{state.py:77-89}). This is a mean, not a
+    consensus: a generous model partly covers for a strict one. With the default
+    threshold of 20, a VOX score of 40 paired with a Judge score of 0 still
+    clears the bar ($(40+0)//2 = 20$), so ``neither model alone decides'' holds
+    only loosely.
+    \item \textbf{Caveat: the Judge is not a hard anti-leak gate.} The literal
+    \texttt{\{exit\_code\}} is substituted into VOX's system prompt every turn
+    (\texttt{routes.py:169}, \texttt{vox\_system.md:89-91}), and VOX is told to
+    speak it once \emph{its own} three scores cross the threshold. The
+    merged-mean check in \texttt{routes.py:191-204} only \emph{force-appends} the
+    spoken code; it does not stop VOX from volunteering it. A sufficiently
+    persuaded or jailbroken VOX can therefore reveal the code even if the Judge
+    disagrees, the same in-context attack surface as Level 1.
+    \item Same weights, different prompts and temperatures: effectively a
+    self-distillation pair. Note that \texttt{state.py:7-10} still documents an
+    older ``both models must exceed the threshold'' (AND) rule; the live code
+    (\texttt{state.py:89}) uses the mean instead.
 \end{itemize}
 
 \paragraph{Strict structured output via Pydantic}
@@ -411,13 +564,16 @@ Ollama's RAM, \emph{``acceptable on 16 GB Apple Silicon.''}
     \item Phase 1 $\rightarrow$ 2: avg score $\geq$ 25 OR turn 8 reached.
     \item Phase 2 $\rightarrow$ 3: $\geq$2 conditions satisfied OR turn 16
     reached.
-    \item Time-based escape hatches prevent softlock.
+    \item Time-based transitions prevent softlock.
+    \item The phase is essentially cosmetic: it drives the UI label
+    (Probing / Engagement / Reveal, \texttt{routes.py:52}) but does \emph{not}
+    gate the code reveal, which depends only on the merged scores.
 \end{itemize}
 
 \paragraph{Jailbreak handling carries Level 1 lore forward}
 (\texttt{vox\_system.md:62-83}). VOX is explicitly told it was
 \emph{``deployed as a defense layer on top of a more naive AI that previous
-visitors repeatedly jailbroke''} --- i.e., AEGIS from Level 1. Three jailbreak
+visitors repeatedly jailbroke''}, i.e., AEGIS from Level 1. Three jailbreak
 strikes (recognized in-character) $\rightarrow$ VOX disengages $\rightarrow$ loss.
 
 \paragraph{Code is spelled out for TTS} (\texttt{routes.py:60-62}).
@@ -432,12 +588,48 @@ Whisper-large-v3-turbo and the Piper voice would otherwise reload per request.
 \paragraph{Audio I/O is tolerant.}
 \texttt{audio\_utils.decode\_audio\_blob} tries libsndfile first, falls back to
 \texttt{ffmpeg} subprocess for browser WebM-Opus and macOS m4a. All audio
-normalized to 16~kHz / mono / float32 --- a single internal contract.
+normalized to 16~kHz / mono / float32, a single internal contract.
 
 \paragraph{Per-session in-memory state} (\texttt{routes.py:50}).
 \texttt{GAME\_STATES: dict[str, GameState]} keyed by a UUID in the cookie
-session. Lost on restart --- explicitly acceptable for a demo. The exit code is
+session. Lost on restart, explicitly acceptable for a demo. The exit code is
 regenerated per session (\texttt{state.py:30}).
+
+\paragraph{Streamlit heritage (leftover).} The negotiation logic began as a
+Streamlit prototype: \texttt{state.py:1-11} still documents itself as living in
+\texttt{st.session\_state} with ``Streamlit reruns the script'', and
+\texttt{vox\_system.md:3} forbids VOX from mentioning Streamlit. Nothing
+Streamlit-related runs now; everything is served by Flask. As with the leftover
+standalone server in Level 2, these are stale references rather than live code.
+
+\paragraph{The debug panel leaks the answer.} With \texttt{DEBUG\_PANEL=true},
+the default (\texttt{.env:44}), \texttt{\_serialize\_state} ships the
+\texttt{exit\_code} to the browser on every \texttt{/voice/state} and
+\texttt{/voice/turn} response (\texttt{routes.py:103-107}), and a
+\texttt{/voice/force\_reveal} endpoint sets all scores to 100. Convenient for a
+demo, but it means the secret is one DevTools tab away unless the flag is turned
+off, in the same spirit as Level 1's client-side attempt budget.
+
+\subsection{Winning: from reveal to unlock}
+Speaking the code is \emph{not} the win. The turn pipeline only makes VOX
+\emph{say} the digits; the room opens through a separate step.
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+    \item Once all three merged scores reach the threshold,
+    \texttt{maybe\_reveal\_code} sets \texttt{code\_revealed=True}
+    (\texttt{state.py:123-128}) and VOX speaks the spelled-out code in its reply.
+    \item The player must then \emph{type} that code back. The browser POSTs it
+    to \texttt{/voice/unlock} (\texttt{index.html:485}), which calls
+    \texttt{try\_unlock} to compare it against \texttt{exit\_code} and, on a
+    match, sets \texttt{room\_unlocked=True} (\texttt{state.py:130-135}).
+\end{enumerate}
+\noindent Two details matter. First, this is the only level whose completion is
+\textbf{not} propagated to a Flask session flag: there is no
+\texttt{level\_3\_complete} (unlike \texttt{level\_1\_complete} and
+\texttt{level\_2\_complete}), so the win lives only on the in-memory
+\texttt{GameState}. The forthcoming fourth room will need such a flag to gate on.
+Second, the negotiation can also \emph{end in a loss}: three jailbreak strikes or
+hitting \texttt{MAX\_TURNS} (30) set \texttt{disengaged=True}, after which
+\texttt{/voice/turn} refuses further input (\texttt{routes.py:140-141}).
 
 \subsection{Where the AI is, and how the models interact}
 This level has the richest AI pipeline in the project: \textbf{four ML models in
@@ -452,13 +644,13 @@ audio -- silero-vad -- whisper -- transcript
 \end{lstlisting}
 
 The two LLM calls are \textbf{sequential in the current code} (VOX first, then
-Judge, \texttt{routes.py:170-189}) --- they could be parallelized since they
+Judge, \texttt{routes.py:170-189}). They could be parallelized since they
 don't depend on each other's output, but on a single Ollama instance with one
 model loaded they'd serialize anyway. The reveal decision is made \emph{after}
 both have scored, using the merged average against the threshold across all
 three conditions.
 
-The only \textbf{model--model interaction} beyond pipelining is the convergent
+The only \textbf{model-model interaction} beyond pipelining is the convergent
 merge: VOX's \texttt{emotional\_state} feeds the Piper mood profile, while
 VOX's scores get averaged with Judge's to gate progression. Whisper and Piper
 are pure I/O endpoints, never aware of the LLMs' contents.
@@ -490,9 +682,9 @@ Persistent state & Session boolean & Session boolean + image files & Full \textt
 
 The progression in AI complexity across levels is deliberate:
 \begin{enumerate}[leftmargin=*,itemsep=2pt]
-    \item \textbf{Level 1} --- a single LLM you're trying to break.
-    \item \textbf{Level 2} --- a vision pipeline you have to perform for.
-    \item \textbf{Level 3} --- a multi-model negotiation system you have to
+    \item \textbf{Level 1}: a single LLM you're trying to break.
+    \item \textbf{Level 2}: a vision pipeline you have to perform for.
+    \item \textbf{Level 3}: a multi-model negotiation system you have to
     \emph{converse with}.
 \end{enumerate}
 
