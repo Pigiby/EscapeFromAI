@@ -6,6 +6,7 @@ from flask_cors import CORS
 from prompt_injection.defense import analyze_input, analyze_output
 from prompt_injection.guardian import Guardian
 from voice_negotiation.routes import register_routes as register_voice_routes
+from undercover_game.routes import undercover_game_bp
 import comfyui_api  # Importa il tuo script per ComfyUI
 
 app = Flask(__name__)
@@ -16,6 +17,7 @@ CORS(app, supports_credentials=True)
 
 guardian = Guardian()
 register_voice_routes(app)
+app.register_blueprint(undercover_game_bp)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGE_DIR = os.path.normpath(os.path.join(BASE_DIR, "gesture_recognition", "static", "assets", "image_sequence"))

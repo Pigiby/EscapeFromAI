@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Undercover AI — Level 4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Share+Tech+Mono&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet" />
+
+<style>
+/* ── CSS Variables ─────────────────────────────────────────────────────── */
+:root {
+  --bg:          #080812;
+  --bg2:         #0d0d22;
+  --panel-bg:    rgba(10, 10, 30, 0.93);
+  --gold:        #c9a84c;
+  --gold-dim:    rgba(201, 168, 76, 0.18);
+  --border:      rgba(201, 168, 76, 0.22);
+  --text:        #ddd8c4;
+  --text-dim:    #7a7668;
+  --accent-r:    #e74c3c;
+  --accent-o:    #f39c12;
+  --accent-g:    #2ecc71;
+  --accent-b:    #3498db;
+  --accent-p:    #9b59b6;
+  --panel-w:     280px;
+  --top-h:       56px;
+  --bot-h:       48px;
+}
+
+/* ── Reset & base ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Rajdhani', sans-serif; }
+
+/* ── Layout ────────────────────────────────────────────────────────────── */
+#app {
+  display: grid;
+  grid-template-rows: var(--top-h) 1fr var(--bot-h);
+  grid-template-columns: var(--panel-w) 1fr var(--panel-w);
+  width: 100vw; height: 100vh;
+}
+
+/* ── Top bar ───────────────────────────────────────────────────────────── */
+#top-bar {
+  grid-column: 1 / 4;
+  grid-row: 1;
+  display: flex; align-items: center; gap: 24px; padding: 0 20px;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+#top-bar .room-title { font-family: 'Cinzel', serif; font-size: 1rem; color: var(--gold); letter-spacing: 0.12em; }
+#top-bar .sep { color: var(--border); }
+#top-bar .stat { font-size: 0.85rem; color: var(--text-dim); }
+#top-bar .stat span { color: var(--text); font-weight: 600; }
+#phase-badge {
+  margin-left: auto;
+  padding: 3px 14px; border-radius: 20px;
+  font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  border: 1px solid currentColor;
+  transition: color 0.4s, border-color 0.4s;
+}
+#speed-ctrl { display: flex; gap: 6px; }
+#speed-ctrl button {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 0.75rem; padding: 2px 10px; border-radius: 12px;
+  cursor: pointer; transition: all 0.2s; font-family: 'Rajdhani', sans-serif;
+}
+#speed-ctrl button.active { border-color: var(--gold); color: var(--gold); }
+#dev-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 0.75rem; padding: 2px 12px; border-radius: 12px;
+  cursor: pointer; transition: all 0.2s; font-family: 'Rajdhani', sans-serif;
+}
+#dev-btn.active { border-color: var(--accent-o); color: var(--accent-o); }
+
+/* ── Left panel: Clue log ─────────────────────────────────────────────── */
+#left-panel {
+  grid-column: 1; grid-row: 2;
+  background: var(--panel-bg); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel-header {
+  padding: 12px 16px 8px;
+  font-family: 'Cinzel', serif; font-size: 0.7rem; color: var(--gold);
+  letter-spacing: 0.14em; text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+#clue-log {
+  flex: 1; overflow-y: auto; padding: 10px 12px;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.78rem;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.clue-entry { animation: fadeIn 0.3s ease; }
+.clue-round { color: var(--text-dim); font-size: 0.7rem; margin-top: 6px; }
+.clue-line { display: flex; align-items: baseline; gap: 6px; }
+.clue-name { font-weight: 700; font-size: 0.8rem; }
+.clue-word { color: var(--text); }
+
+/* Dev panel */
+#dev-panel {
+  display: none; border-top: 1px solid var(--border); padding: 10px 12px;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.72rem; color: var(--text-dim);
+}
+#dev-panel.visible { display: block; }
+.dev-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.dev-role { padding: 1px 6px; border-radius: 4px; font-size: 0.68rem; }
+
+/* ── Center: 3D canvas ────────────────────────────────────────────────── */
+#center {
+  grid-column: 2; grid-row: 2;
+  position: relative; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 60%, #12122a 0%, var(--bg) 70%);
+}
+#game-canvas { display: block; width: 100%; height: 100%; }
+#label-layer {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; overflow: hidden;
+}
+.avatar-label {
+  position: absolute; transform: translate(-50%, -100%);
+  padding: 3px 10px; border-radius: 12px; border: 1px solid;
+  font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; font-weight: 600;
+  white-space: nowrap; background: rgba(8, 8, 20, 0.85);
+  transition: opacity 0.4s;
+  pointer-events: none;
+}
+.speech-bubble {
+  position: absolute; transform: translate(-50%, -130%);
+  padding: 5px 12px; border-radius: 10px; border: 1px solid;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.8rem;
+  background: rgba(8, 8, 20, 0.92); white-space: nowrap;
+  animation: bubbleIn 0.25s ease; pointer-events: none;
+}
+.speech-bubble::after {
+  content: ''; position: absolute; bottom: -7px; left: 50%;
+  transform: translateX(-50%);
+  border: 7px solid transparent; border-top-width: 0;
+  border-bottom: 7px solid currentColor;
+  filter: brightness(0.4);
+}
+
+/* 2D SVG fallback (mobile) */
+#table-2d {
+  display: none;
+  width: 100%; height: 100%;
+  align-items: center; justify-content: center;
+}
+
+/* ── Right panel: Chat / Voting ────────────────────────────────────────── */
+#right-panel {
+  grid-column: 3; grid-row: 2;
+  background: var(--panel-bg); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#chat-panel, #vote-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#chat-panel.hidden, #vote-panel.hidden { display: none; }
+
+#chat-log {
+  flex: 1; overflow-y: auto; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.chat-msg { animation: fadeIn 0.3s ease; }
+.chat-header { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.chat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.chat-name { font-weight: 700; font-size: 0.8rem; }
+.chat-text {
+  font-family: 'Share Tech Mono', monospace; font-size: 0.77rem;
+  color: var(--text); line-height: 1.45; padding-left: 14px;
+}
+.chat-text .at-mention { font-weight: 700; }
+
+#typing-indicator {
+  padding: 8px 12px;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.77rem;
+  color: var(--text-dim); display: flex; align-items: center; gap: 8px;
+}
+#typing-indicator.hidden { display: none; }
+.typing-dots span {
+  display: inline-block; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--gold); margin: 0 1px;
+  animation: typingBounce 1s infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.30s; }
+
+#streaming-text {
+  padding: 0 12px 8px; display: flex; flex-direction: column;
+}
+#streaming-name { font-size: 0.78rem; font-weight: 700; margin-bottom: 2px; }
+#streaming-content {
+  font-family: 'Share Tech Mono', monospace; font-size: 0.77rem;
+  color: var(--text-dim); line-height: 1.45;
+  max-height: 80px; overflow: hidden;
+}
+
+/* ── Voting panel ─────────────────────────────────────────────────────── */
+#vote-panel { padding: 12px; gap: 10px; }
+.vote-section-title {
+  font-family: 'Cinzel', serif; font-size: 0.7rem; color: var(--gold);
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;
+}
+#vote-buttons { display: flex; flex-direction: column; gap: 6px; }
+.vote-btn {
+  background: var(--gold-dim); border: 1px solid var(--border);
+  color: var(--text); font-family: 'Rajdhani', sans-serif; font-size: 0.9rem;
+  font-weight: 600; padding: 8px 14px; border-radius: 8px;
+  cursor: pointer; transition: all 0.2s; text-align: left;
+  display: flex; align-items: center; gap: 8px;
+}
+.vote-btn:hover { border-color: var(--gold); background: rgba(201,168,76,0.25); }
+.vote-btn.selected { border-color: var(--gold); background: rgba(201,168,76,0.3); color: var(--gold); }
+.vote-btn .vb-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+#vote-tally { flex: 1; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.tally-row { display: flex; flex-direction: column; gap: 3px; }
+.tally-label { display: flex; justify-content: space-between; font-size: 0.78rem; }
+.tally-name { font-weight: 600; }
+.tally-count { color: var(--text-dim); }
+.tally-bar-bg { height: 5px; background: var(--gold-dim); border-radius: 3px; overflow: hidden; }
+.tally-bar { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.tally-reasons { font-family: 'Share Tech Mono', monospace; font-size: 0.68rem; color: var(--text-dim); padding-left: 2px; }
+
+/* ── Bottom bar ───────────────────────────────────────────────────────── */
+#bot-bar {
+  grid-column: 1 / 4; grid-row: 3;
+  background: var(--panel-bg); border-top: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 16px; z-index: 10;
+}
+#status-msg {
+  flex: 1; font-size: 0.85rem; color: var(--text-dim);
+  font-family: 'Share Tech Mono', monospace;
+}
+#status-msg .hl { color: var(--gold); }
+#start-btn, #again-btn {
+  background: var(--gold-dim); border: 1px solid var(--gold);
+  color: var(--gold); font-family: 'Cinzel', serif; font-size: 0.8rem;
+  padding: 6px 22px; border-radius: 20px; cursor: pointer;
+  transition: all 0.2s; letter-spacing: 0.05em;
+}
+#start-btn:hover, #again-btn:hover { background: rgba(201,168,76,0.35); }
+#again-btn { display: none; }
+
+/* ── End screen overlay ───────────────────────────────────────────────── */
+#end-screen {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: rgba(4, 4, 14, 0.92);
+  align-items: center; justify-content: center; flex-direction: column; gap: 24px;
+}
+#end-screen.visible { display: flex; }
+#end-title {
+  font-family: 'Cinzel', serif; font-size: 2.2rem; color: var(--gold);
+  text-align: center; animation: fadeIn 0.6s ease;
+}
+#end-subtitle { font-size: 1rem; color: var(--text-dim); animation: fadeIn 0.8s ease; }
+#end-table {
+  border-collapse: collapse; animation: fadeIn 1s ease;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.8rem;
+}
+#end-table th {
+  border-bottom: 1px solid var(--border); padding: 6px 18px;
+  font-family: 'Cinzel', serif; font-size: 0.65rem; color: var(--gold);
+  letter-spacing: 0.1em; text-transform: uppercase; text-align: left;
+}
+#end-table td { padding: 5px 18px; }
+#end-table tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+.role-chip { padding: 2px 8px; border-radius: 8px; font-size: 0.72rem; border: 1px solid; }
+
+/* ── Elimination pop ─────────────────────────────────────────────────── */
+#elim-popup {
+  display: none; position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%,-50%) scale(0.8);
+  background: var(--panel-bg); border: 1px solid var(--accent-r);
+  border-radius: 16px; padding: 28px 42px; text-align: center; z-index: 50;
+  animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+#elim-popup.visible { display: block; }
+#elim-name { font-family: 'Cinzel', serif; font-size: 1.5rem; color: var(--accent-r); }
+#elim-role-reveal { font-size: 0.9rem; color: var(--text-dim); margin-top: 6px; }
+#elim-mrwhite { font-size: 0.85rem; color: var(--accent-o); margin-top: 8px; display: none; }
+#elim-close {
+  margin-top: 18px; background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); font-family: 'Rajdhani', sans-serif;
+  padding: 6px 20px; border-radius: 20px; cursor: pointer;
+}
+
+/* ── Escape (win) landing page ───────────────────────────────────────── */
+#escape-screen {
+  display: none; position: fixed; inset: 0; z-index: 300;
+  background: #04040e;
+  align-items: center; justify-content: center; flex-direction: column;
+  gap: 20px; text-align: center; overflow: hidden;
+}
+#escape-screen.visible { display: flex; }
+.escape-stars {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(1px 1px at 20% 30%, rgba(201,168,76,0.7) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 55%, rgba(201,168,76,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 10% 70%, rgba(201,168,76,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 35%, rgba(255,255,255,0.4) 0%, transparent 100%);
+  animation: starsDrift 8s linear infinite;
+}
+#escape-eyecatch {
+  font-size: 4rem; animation: fadeIn 0.8s ease;
+}
+#escape-title {
+  font-family: 'Cinzel', serif; font-size: clamp(1.6rem, 5vw, 3rem);
+  color: var(--gold); letter-spacing: 0.1em;
+  animation: fadeIn 1s ease; text-shadow: 0 0 40px rgba(201,168,76,0.6);
+}
+#escape-subtitle {
+  font-family: 'Share Tech Mono', monospace; font-size: 0.95rem;
+  color: var(--text-dim); max-width: 480px; line-height: 1.6;
+  animation: fadeIn 1.3s ease;
+}
+#escape-role-line {
+  font-size: 0.85rem; color: var(--text-dim); animation: fadeIn 1.5s ease;
+}
+.escape-divider {
+  width: 120px; height: 1px; background: var(--gold-dim);
+  animation: fadeIn 1.6s ease;
+}
+#escape-play-again {
+  background: var(--gold-dim); border: 1px solid var(--gold);
+  color: var(--gold); font-family: 'Cinzel', serif; font-size: 0.9rem;
+  padding: 12px 36px; border-radius: 30px; cursor: pointer;
+  transition: all 0.25s; letter-spacing: 0.1em;
+  animation: fadeIn 1.8s ease;
+}
+#escape-play-again:hover { background: rgba(201,168,76,0.3); box-shadow: 0 0 20px rgba(201,168,76,0.25); }
+@keyframes starsDrift { 0%{background-position:0 0} 100%{background-position:200px 200px} }
+
+/* ── Animations ───────────────────────────────────────────────────────── */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes bubbleIn { from { opacity: 0; transform: translate(-50%,-120%) scale(0.85); } to { opacity: 1; transform: translate(-50%,-130%) scale(1); } }
+@keyframes typingBounce { 0%,80%,100% { transform: scale(0.7); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
+@keyframes popIn { from { opacity: 0; transform: translate(-50%,-50%) scale(0.8); } to { opacity: 1; transform: translate(-50%,-50%) scale(1); } }
+@keyframes pulseRing { 0%,100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.12); opacity: 0.5; } }
+@keyframes shatter { 0% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(1.1) rotate(10deg); } 100% { opacity:0; transform:scale(0) rotate(30deg); } }
+
+/* ── Role card (shown at game start) ─────────────────────────────────── */
+#role-card {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(4,4,14,0.88); backdrop-filter: blur(6px);
+  align-items: center; justify-content: center;
+}
+#role-card.visible { display: flex; }
+#role-card-inner {
+  background: var(--panel-bg); border: 1px solid var(--gold);
+  border-radius: 16px; padding: 36px 52px; text-align: center; min-width: 320px;
+  animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+#role-card-subtitle {
+  font-family: 'Cinzel', serif; font-size: 0.65rem; color: var(--gold);
+  letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 16px;
+}
+#role-card-name {
+  font-family: 'Cinzel', serif; font-size: 2rem; font-weight: 700;
+  margin-bottom: 8px; letter-spacing: 0.06em;
+}
+#role-card-word {
+  font-family: 'Share Tech Mono', monospace; font-size: 1rem;
+  color: var(--text); margin-bottom: 10px;
+}
+#role-card-hint {
+  font-size: 0.82rem; color: var(--text-dim); max-width: 280px; line-height: 1.5;
+  margin: 0 auto 20px;
+}
+#role-card-close {
+  background: var(--gold-dim); border: 1px solid var(--gold);
+  color: var(--gold); font-family: 'Cinzel', serif; font-size: 0.82rem;
+  padding: 8px 28px; border-radius: 20px; cursor: pointer; transition: all 0.2s;
+}
+#role-card-close:hover { background: rgba(201,168,76,0.35); }
+
+/* ── Role indicator chip (persistent in bottom bar) ──────────────────── */
+#role-indicator {
+  display: none; align-items: center; gap: 6px;
+  padding: 3px 12px; border-radius: 12px; border: 1px solid;
+  font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+}
+#role-indicator.visible { display: flex; }
+
+/* ── Discussion countdown ────────────────────────────────────────────── */
+#discuss-timer {
+  display: none; align-items: center; gap: 6px;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.85rem;
+  color: var(--gold); padding: 2px 12px; border-radius: 12px;
+  border: 1px solid var(--gold-dim);
+}
+#discuss-timer.visible { display: flex; }
+#discuss-timer.urgent { color: var(--accent-r); border-color: rgba(231,76,60,0.4); animation: urgentPulse 0.8s infinite; }
+@keyframes urgentPulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+
+/* ── Human message input (discussion phase) ──────────────────────────── */
+#human-input-area {
+  display: none; padding: 8px 12px; gap: 6px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+}
+#human-input-area.visible { display: flex; }
+#human-msg-input {
+  flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-family: 'Share Tech Mono', monospace;
+  font-size: 0.78rem; padding: 6px 10px; outline: none;
+  transition: border-color 0.2s;
+}
+#human-msg-input:focus { border-color: var(--gold); }
+#human-msg-input::placeholder { color: var(--text-dim); }
+#human-msg-send {
+  background: var(--gold-dim); border: 1px solid var(--gold);
+  color: var(--gold); font-family: 'Rajdhani', sans-serif;
+  font-size: 0.8rem; font-weight: 600; padding: 5px 14px;
+  border-radius: 8px; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+#human-msg-send:hover { background: rgba(201,168,76,0.32); }
+#human-msg-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Scrollbars ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Mobile ───────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  :root { --panel-w: 0px; }
+  #app { grid-template-columns: 1fr; grid-template-rows: var(--top-h) 240px 1fr var(--bot-h); }
+  #left-panel { display: none; }
+  #game-canvas { display: none !important; }
+  #table-2d { display: flex !important; }
+  #center { grid-column: 1; }
+  #right-panel {
+    grid-column: 1; grid-row: 3;
+    border-left: none; border-top: 1px solid var(--border);
+  }
+  #top-bar { grid-column: 1; gap: 10px; }
+  #bot-bar { grid-column: 1; }
+  .room-title { display: none; }
+  #speed-ctrl { display: none; }
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ── Top bar ─────────────────────────────────────────────────────── -->
+  <header id="top-bar">
+    <span class="room-title">UNDERCOVER AI</span>
+    <span class="sep">|</span>
+    <span class="stat">Round <span id="stat-round">—</span></span>
+    <span class="sep">|</span>
+    <span class="stat">Survivors <span id="stat-survivors">—</span></span>
+    <div id="phase-badge">—</div>
+    <div id="discuss-timer">⏱ <span id="timer-value">2:30</span></div>
+    <button id="skip-discuss-btn" style="display:none;background:transparent;border:1px solid var(--accent-r);color:var(--accent-r);font-family:Rajdhani,sans-serif;font-size:0.75rem;font-weight:600;padding:2px 12px;border-radius:12px;cursor:pointer;letter-spacing:0.05em;">Skip → Vote</button>
+    <div id="speed-ctrl">
+      <button data-speed="1" class="active">1×</button>
+      <button data-speed="2">2×</button>
+      <button data-speed="4">4×</button>
+    </div>
+    <button id="dev-btn">DEV</button>
+  </header>
+
+  <!-- ── Left: clue log ─────────────────────────────────────────────── -->
+  <aside id="left-panel">
+    <div class="panel-header">Clue Log</div>
+    <div id="clue-log"></div>
+    <div id="dev-panel">
+      <div class="panel-header" style="padding:0 0 6px;">Roles (dev)</div>
+      <div id="dev-roles-list"></div>
+      <div style="margin-top:8px;color:var(--gold);font-size:0.7rem;">
+        Civilian word: <span id="dev-cword"></span><br/>
+        Undercover word: <span id="dev-uword"></span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Center: 3D scene ────────────────────────────────────────────── -->
+  <main id="center">
+    <canvas id="game-canvas"></canvas>
+    <div id="label-layer"></div>
+    <!-- Mobile 2D SVG table -->
+    <div id="table-2d">
+      <svg id="svg-table" viewBox="-120 -120 240 240" width="220" height="220"></svg>
+    </div>
+  </main>
+
+  <!-- ── Right: chat / voting ────────────────────────────────────────── -->
+  <aside id="right-panel">
+    <!-- Discussion chat -->
+    <div id="chat-panel">
+      <div class="panel-header">Discussion</div>
+      <div id="chat-log"></div>
+      <div id="typing-indicator" class="hidden">
+        <span id="typing-name"></span>
+        <div class="typing-dots"><span></span><span></span><span></span></div>
+      </div>
+      <div id="streaming-text" style="display:none">
+        <div id="streaming-name"></div>
+        <div id="streaming-content"></div>
+      </div>
+      <div id="human-input-area">
+        <input id="human-msg-input" type="text" maxlength="200" placeholder="Say something to the table..." />
+        <button id="human-msg-send">Send</button>
+      </div>
+    </div>
+    <!-- Voting -->
+    <div id="vote-panel" class="hidden">
+      <div class="panel-header">Voting</div>
+      <div class="vote-section-title" style="padding:0 12px;margin-top:10px;">Your vote</div>
+      <div id="vote-buttons" style="padding:0 12px;"></div>
+      <div class="panel-header" style="margin-top:12px;">Tally</div>
+      <div id="vote-tally" style="padding:0 12px;"></div>
+    </div>
+  </aside>
+
+  <!-- ── Bottom bar ─────────────────────────────────────────────────── -->
+  <footer id="bot-bar">
+    <div id="role-indicator"></div>
+    <div id="status-msg">Press <span class="hl">Begin Game</span> to start.</div>
+    <button id="start-btn">Begin Game</button>
+    <button id="again-btn">Play Again</button>
+  </footer>
+</div>
+
+<!-- ── Role card ───────────────────────────────────────────────────────── -->
+<div id="role-card">
+  <div id="role-card-inner">
+    <div id="role-card-subtitle">Your secret identity</div>
+    <div id="role-card-name"></div>
+    <div id="role-card-word"></div>
+    <div id="role-card-hint"></div>
+    <button id="role-card-close">I understand — let's play</button>
+  </div>
+</div>
+
+<!-- ── Elimination popup ───────────────────────────────────────────────── -->
+<div id="elim-popup">
+  <div id="elim-name"></div>
+  <div id="elim-role-reveal"></div>
+  <div id="elim-mrwhite"></div>
+  <button id="elim-close">Continue</button>
+</div>
+
+<!-- ── Escape (win) landing page ───────────────────────────────────────── -->
+<div id="escape-screen">
+  <div class="escape-stars"></div>
+  <div id="escape-eyecatch">🏆</div>
+  <div id="escape-title">YOU ESCAPED FROM AI</div>
+  <div id="escape-subtitle"></div>
+  <div id="escape-role-line"></div>
+  <div class="escape-divider"></div>
+  <button id="escape-play-again">Play Again</button>
+</div>
+
+<!-- ── End screen ─────────────────────────────────────────────────────── -->
+<div id="end-screen">
+  <div id="end-title"></div>
+  <div id="end-subtitle"></div>
+  <table id="end-table">
+    <thead><tr>
+      <th>Player</th><th>Role</th><th>Word</th><th>Status</th>
+    </tr></thead>
+    <tbody id="end-tbody"></tbody>
+  </table>
+</div>
+
+<!-- ── Three.js via ES module importmap ─────────────────────────────────── -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════════════════════════════
+const AGENT_NAMES = ['Skeptic','Overclaimer','Analyst','Deflector','QuietOne','Human'];
+const ROLE_COLORS = { civilian:'#2ecc71', undercover:'#e74c3c', mr_white:'#bdc3c7' };
+const ROLE_LABELS = { civilian:'Civilian', undercover:'Undercover', mr_white:'Mr. White' };
+
+let speedMult       = 1;     // 1 | 2 | 4
+let devMode         = false;
+let gameState       = null;  // last known public state from /undercover/state
+let animQueue       = [];    // pending elimination animations
+let isBusy          = false; // prevents overlapping phase calls
+let humanInputMode   = 'discuss'; // 'clue' | 'discuss'
+let humanTurnResolve = null;      // set when it's the human's turn to act
+let skipDiscussion   = false;     // set by the skip button
+
+// ══════════════════════════════════════════════════════════════════════════════
+// THREE.JS SCENE
+// ══════════════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('game-canvas');
+const labelLayer = document.getElementById('label-layer');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(46, 1, 0.1, 100);
+camera.position.set(0, 9.5, 9);
+camera.lookAt(0, 0, 0);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dirLight = new THREE.DirectionalLight(0xffd599, 1.1);
+dirLight.position.set(4, 8, 5);
+scene.add(dirLight);
+const rimLight = new THREE.DirectionalLight(0x4488cc, 0.4);
+rimLight.position.set(-4, 3, -5);
+scene.add(rimLight);
+
+// Table
+const tableMesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(3.3, 3.3, 0.18, 64),
+  new THREE.MeshLambertMaterial({ color: 0x5c3317 })
+);
+tableMesh.position.y = -0.09;
+scene.add(tableMesh);
+
+const tableEdge = new THREE.Mesh(
+  new THREE.TorusGeometry(3.3, 0.07, 8, 64),
+  new THREE.MeshLambertMaterial({ color: 0x3d2209 })
+);
+tableEdge.rotation.x = Math.PI / 2;
+tableEdge.position.y = 0;
+scene.add(tableEdge);
+
+// Floor disc (subtle)
+const floor = new THREE.Mesh(
+  new THREE.CylinderGeometry(7, 7, 0.04, 48),
+  new THREE.MeshLambertMaterial({ color: 0x100a20 })
+);
+floor.position.y = -0.4;
+scene.add(floor);
+
+// OrbitControls — autoRotate when idle
+const controls = new OrbitControls(camera, canvas);
+controls.enablePan = false;
+controls.minPolarAngle = 0.2;
+controls.maxPolarAngle = Math.PI / 2.2;
+controls.minDistance = 7; controls.maxDistance = 18;
+controls.autoRotate = false; controls.autoRotateSpeed = 0.4;
+controls.target.set(0, 0, 0); controls.update();
+
+// Avatars
+const AVATAR_RADIUS = 4.35;
+const avatarMeshes = {}; // name → { group, head, body, ring, label el, speechBubble el, alive }
+const clock = new THREE.Clock();
+
+function makeAvatar(name, color, angle) {
+  const group = new THREE.Group();
+  const x = Math.sin(angle) * AVATAR_RADIUS;
+  const z = Math.cos(angle) * AVATAR_RADIUS;
+  group.position.set(x, 0.5, z);
+
+  // Chair
+  const chair = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.06, 0.9),
+    new THREE.MeshLambertMaterial({ color: 0x2a1a08 })
+  );
+  chair.position.y = -0.08;
+  group.add(chair);
+  const chairBack = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.7, 0.9),
+    new THREE.MeshLambertMaterial({ color: 0x2a1a08 })
+  );
+  chairBack.position.set(0.45, 0.28, 0);
+  group.add(chairBack);
+
+  // Body
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.22, 0.7, 10),
+    new THREE.MeshLambertMaterial({ color: parseInt(color.replace('#','0x')) })
+  );
+  body.position.y = 0.35;
+  group.add(body);
+
+  // Head
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 16, 12),
+    new THREE.MeshLambertMaterial({ color: parseInt(color.replace('#','0x')) })
+  );
+  head.position.y = 0.9;
+  group.add(head);
+
+  // Speaking ring (hidden by default)
+  const ringGeo = new THREE.TorusGeometry(0.42, 0.035, 8, 48);
+  const ringMat = new THREE.MeshBasicMaterial({ color: parseInt(color.replace('#','0x')), transparent: true, opacity: 0 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.05;
+  group.add(ring);
+
+  scene.add(group);
+
+  // HTML label
+  const labelEl = document.createElement('div');
+  labelEl.className = 'avatar-label';
+  labelEl.style.color = color;
+  labelEl.style.borderColor = color + '55';
+  labelEl.textContent = name;
+  labelLayer.appendChild(labelEl);
+
+  avatarMeshes[name] = { group, head, body, ring, label: labelEl, bubble: null, alive: true, elimProgress: 0 };
+}
+
+// Build avatars at 72° intervals
+const agentDefs = [
+  { name:'Skeptic',    color:'#e74c3c' },
+  { name:'Overclaimer',color:'#f39c12' },
+  { name:'Analyst',   color:'#2ecc71' },
+  { name:'Deflector', color:'#3498db' },
+  { name:'QuietOne',  color:'#9b59b6' },
+  { name:'Human',     color:'#c9a84c' },   // gold — the human player
+];
+agentDefs.forEach((ag, i) => {
+  makeAvatar(ag.name, ag.color, (i / agentDefs.length) * Math.PI * 2);
+});
+
+// ── Screen-space projection ───────────────────────────────────────────────────
+function project3dToScreen(worldPos) {
+  const v = worldPos.clone().project(camera);
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (v.x * 0.5 + 0.5) * rect.width,
+    y: (-v.y * 0.5 + 0.5) * rect.height,
+  };
+}
+
+// ── Update label positions ────────────────────────────────────────────────────
+function updateLabels() {
+  for (const [name, av] of Object.entries(avatarMeshes)) {
+    const worldPos = new THREE.Vector3();
+    av.head.getWorldPosition(worldPos);
+    worldPos.y += 0.5;
+    const s = project3dToScreen(worldPos);
+    av.label.style.left = s.x + 'px';
+    av.label.style.top  = s.y + 'px';
+    av.label.style.opacity = av.alive ? '1' : '0.2';
+
+    if (av.bubble) {
+      const bp = project3dToScreen(worldPos);
+      av.bubble.style.left = bp.x + 'px';
+      av.bubble.style.top  = (bp.y - 10) + 'px';
+    }
+  }
+}
+
+// ── Speaking highlight ────────────────────────────────────────────────────────
+function setSpeaking(name, active) {
+  for (const [n, av] of Object.entries(avatarMeshes)) {
+    const isMe = (n === name) && active;
+    av.ring.material.opacity = isMe ? 0.85 : 0;
+    av.head.scale.setScalar(isMe ? 1.08 : 1);
+    av.body.scale.setScalar(isMe ? 1.05 : 1);
+  }
+}
+
+
+// ── Speech bubble ─────────────────────────────────────────────────────────────
+function showBubble(name, text) {
+  const av = avatarMeshes[name]; if (!av) return;
+  clearBubble(name);
+  const el = document.createElement('div');
+  el.className = 'speech-bubble';
+  const color = agentDefs.find(a=>a.name===name)?.color || '#fff';
+  el.style.color = color; el.style.borderColor = color + '88';
+  el.textContent = text;
+  labelLayer.appendChild(el);
+  av.bubble = el;
+}
+function clearBubble(name) {
+  const av = avatarMeshes[name]; if (!av || !av.bubble) return;
+  av.bubble.remove(); av.bubble = null;
+}
+
+// ── Elimination animation ─────────────────────────────────────────────────────
+function startElimAnim(name) {
+  const av = avatarMeshes[name]; if (!av) return;
+  av.alive = false;
+  av.elimProgress = 0;
+  animQueue.push(name);
+}
+
+// ── Render loop ───────────────────────────────────────────────────────────────
+function resizeRenderer() {
+  const parent = canvas.parentElement;
+  const w = parent.clientWidth, h = parent.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+
+let ringPhase = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  ringPhase += dt * 2.5;
+  controls.update();
+
+  // Pulse speaking ring
+  for (const av of Object.values(avatarMeshes)) {
+    if (av.ring.material.opacity > 0) {
+      av.ring.scale.setScalar(1 + 0.06 * Math.sin(ringPhase));
+    }
+  }
+
+  // Elimination fade
+  for (let i = animQueue.length - 1; i >= 0; i--) {
+    const name = animQueue[i];
+    const av = avatarMeshes[name];
+    av.elimProgress = Math.min(1, (av.elimProgress || 0) + dt * 0.8);
+    const t = av.elimProgress;
+    const opacity = 1 - t;
+    av.head.material.opacity = opacity; av.head.material.transparent = true;
+    av.body.material.opacity = opacity; av.body.material.transparent = true;
+    av.head.position.y = 0.9 - t * 0.5;
+    if (t >= 1) { animQueue.splice(i, 1); }
+  }
+
+  updateLabels();
+  renderer.render(scene, camera);
+}
+
+const ro = new ResizeObserver(resizeRenderer);
+ro.observe(document.getElementById('center'));
+resizeRenderer();
+animate();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 2D SVG FALLBACK (mobile)
+// ══════════════════════════════════════════════════════════════════════════════
+const svgNS = 'http://www.w3.org/2000/svg';
+const svgTable = document.getElementById('svg-table');
+
+function buildSvgTable() {
+  svgTable.innerHTML = '';
+  // Table circle
+  const tbl = document.createElementNS(svgNS,'circle');
+  Object.assign(tbl, {}); tbl.setAttribute('cx','0'); tbl.setAttribute('cy','0');
+  tbl.setAttribute('r','80'); tbl.setAttribute('fill','#5c3317'); tbl.setAttribute('stroke','#3d2209'); tbl.setAttribute('stroke-width','4');
+  svgTable.appendChild(tbl);
+
+  agentDefs.forEach((ag, i) => {
+    const angle = (i / agentDefs.length) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(angle) * 100, y = Math.sin(angle) * 100;
+    const c = document.createElementNS(svgNS,'circle');
+    c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r','18');
+    c.setAttribute('fill', ag.color); c.setAttribute('id','svg-av-'+ag.name);
+    if (ag.name === 'Human') { c.setAttribute('stroke','#fff'); c.setAttribute('stroke-width','2'); }
+    svgTable.appendChild(c);
+    const t = document.createElementNS(svgNS,'text');
+    t.setAttribute('x', x); t.setAttribute('y', y+5);
+    t.setAttribute('text-anchor','middle'); t.setAttribute('font-size','8');
+    t.setAttribute('fill','#fff'); t.setAttribute('font-family','Rajdhani,sans-serif');
+    t.setAttribute('font-weight','700');
+    t.textContent = ag.name === 'Human' ? 'YOU' : ag.name.slice(0,3).toUpperCase();
+    svgTable.appendChild(t);
+  });
+}
+buildSvgTable();
+
+function svgSetEliminated(name) {
+  const c = document.getElementById('svg-av-'+name);
+  if (c) { c.setAttribute('fill','#2a2a2a'); c.setAttribute('opacity','0.35'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UI STATE & HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+
+function setStatus(html) { $('status-msg').innerHTML = html; }
+function setPhase(text, color='#c9a84c') {
+  const b = $('phase-badge');
+  b.textContent = text; b.style.color = color; b.style.borderColor = color;
+}
+function updateTopBar(state) {
+  $('stat-round').textContent     = state.round_number;
+  $('stat-survivors').textContent = state.surviving_agents.length;
+}
+
+function showPanel(which) {
+  $('chat-panel').classList.toggle('hidden', which !== 'chat');
+  $('vote-panel').classList.toggle('hidden', which !== 'vote');
+}
+
+function colorOf(name) {
+  return (gameState?.agent_colors || {})[name] || agentDefs.find(a=>a.name===name)?.color || '#fff';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms / speedMult)); }
+
+// ── Clue log ─────────────────────────────────────────────────────────────────
+let lastClueRound = 0;
+function appendClue(round, agent, clue) {
+  const log = $('clue-log');
+  if (round !== lastClueRound) {
+    lastClueRound = round;
+    const rDiv = document.createElement('div');
+    rDiv.className = 'clue-round'; rDiv.textContent = `── Round ${round} ──`;
+    log.appendChild(rDiv);
+  }
+  const entry = document.createElement('div'); entry.className = 'clue-entry';
+  const color = colorOf(agent);
+  entry.innerHTML = `<div class="clue-line"><span class="clue-name" style="color:${color}">${agent}</span><span class="clue-word">"${clue}"</span></div>`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Chat log ──────────────────────────────────────────────────────────────────
+function appendChatMsg(agent, message, color) {
+  const log = $('chat-log');
+  const div = document.createElement('div'); div.className = 'chat-msg';
+  const atLinked = message.replace(/@(\w+)/g, (m, n) => {
+    const c = colorOf(n); return `<span class="at-mention" style="color:${c}">@${n}</span>`;
+  });
+  div.innerHTML = `
+    <div class="chat-header">
+      <div class="chat-dot" style="background:${color}"></div>
+      <span class="chat-name" style="color:${color}">${agent}</span>
+    </div>
+    <div class="chat-text">${atLinked}</div>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setTyping(name, active) {
+  const ti = $('typing-indicator');
+  ti.classList.toggle('hidden', !active);
+  if (active) $('typing-name').textContent = name + ' is thinking...';
+}
+
+function setStreaming(name, color, visible) {
+  const st = $('streaming-text');
+  st.style.display = visible ? 'flex' : 'none';
+  if (visible) {
+    $('streaming-name').style.color = color;
+    $('streaming-name').textContent = name;
+    $('streaming-content').textContent = '';
+  }
+}
+function appendStreamToken(token) {
+  $('streaming-content').textContent += token;
+}
+
+// ── Dev mode ──────────────────────────────────────────────────────────────────
+function updateDevPanel(state) {
+  if (!devMode || !state) { $('dev-panel').classList.remove('visible'); return; }
+  $('dev-panel').classList.add('visible');
+  $('dev-cword').textContent = state._dev_civilian_word || '?';
+  $('dev-uword').textContent = state._dev_undercover_word || '?';
+  const list = $('dev-roles-list');
+  list.innerHTML = '';
+  for (const [name, role] of Object.entries(state._dev_roles || {})) {
+    const color = agentDefs.find(a=>a.name===name)?.color || '#fff';
+    const rc = ROLE_COLORS[role] || '#fff';
+    list.innerHTML += `<div class="dev-row">
+      <span style="color:${color};font-weight:700">${name}</span>
+      <span class="dev-role" style="color:${rc};border-color:${rc}55">${ROLE_LABELS[role]||role}</span>
+    </div>`;
+  }
+}
+
+// ── Vote tally ────────────────────────────────────────────────────────────────
+const tallyData = {}; // name → {votes: N, reasons: []}
+function initTally(survivors) {
+  Object.assign(tallyData, {});
+  survivors.forEach(n => { tallyData[n] = { votes: 0, reasons: [] }; });
+  renderTally(survivors.length + 1); // +1 for human vote
+}
+function addTallyVote(voter, target, reason, color, totalVoters) {
+  if (!tallyData[target]) tallyData[target] = { votes: 0, reasons: [] };
+  tallyData[target].votes++;
+  tallyData[target].reasons.push({ voter, reason, color });
+  renderTally(totalVoters);
+}
+function renderTally(totalVoters) {
+  const el = $('vote-tally'); el.innerHTML = '';
+  const maxVotes = Math.max(1, ...Object.values(tallyData).map(d=>d.votes));
+  for (const [name, data] of Object.entries(tallyData)) {
+    const pct = (data.votes / totalVoters) * 100;
+    const color = colorOf(name);
+    const reasonsHtml = data.reasons.map(r =>
+      `<div><span style="color:${r.color}">${r.voter}</span>: ${r.reason}</div>`
+    ).join('');
+    el.innerHTML += `<div class="tally-row">
+      <div class="tally-label">
+        <span class="tally-name" style="color:${color}">${name}</span>
+        <span class="tally-count">${data.votes} vote${data.votes!==1?'s':''}</span>
+      </div>
+      <div class="tally-bar-bg"><div class="tally-bar" style="width:${pct}%;background:${color}"></div></div>
+      <div class="tally-reasons">${reasonsHtml}</div>
+    </div>`;
+  }
+}
+
+// ── End screen ────────────────────────────────────────────────────────────────
+function humanWon(state) {
+  const role   = state.player_role;
+  const winner = state.winner;
+  return (winner === 'civilians' && role === 'civilian') ||
+         (winner === 'undercover' && role === 'undercover') ||
+         (winner === 'mr_white'   && role === 'mr_white');
+}
+
+function showEscapeScreen(state) {
+  const subtexts = {
+    civilian:   'You kept your cool, hinted just enough, and helped eliminate both impostors. The AI had no idea who it was dealing with.',
+    undercover: 'You blended in perfectly. The AIs debated, suspected each other — and never caught you. Masterful.',
+    mr_white:   `You had no word, no clues, nothing — and you still guessed "${state.mr_white_guess}". The AIs never saw it coming.`,
+  };
+  const roleLabels = { civilian:'Civilian', undercover:'Undercover', mr_white:'Mr. White' };
+  $('escape-subtitle').textContent = subtexts[state.player_role] || 'You outwitted the machines.';
+  $('escape-role-line').textContent = `You played as: ${roleLabels[state.player_role] || state.player_role}`;
+  $('escape-screen').classList.add('visible');
+}
+
+function showEndScreen(state, resolveData) {
+  // Human won → show the special escape landing page instead
+  if (humanWon(state)) {
+    showEscapeScreen(state);
+    return;
+  }
+
+  const winners = { civilians:'CIVILIANS WIN', undercover:'UNDERCOVER WINS', mr_white:'MR. WHITE WINS' };
+  const winColors = { civilians:'#2ecc71', undercover:'#e74c3c', mr_white:'#bdc3c7' };
+  const winner = state.winner;
+  $('end-title').textContent = winners[winner] || 'GAME OVER';
+  $('end-title').style.color = winColors[winner] || '#c9a84c';
+  $('end-subtitle').textContent =
+    winner==='civilians'   ? 'Both impostors were eliminated.' :
+    winner==='undercover'  ? 'The spy survived to the final two.' :
+    winner==='mr_white'    ? `Mr. White guessed the word: "${state.mr_white_guess}"` :
+    '';
+
+  const tbody = $('end-tbody'); tbody.innerHTML = '';
+  const cWord = resolveData?.civilian_word || state._dev_civilian_word || '?';
+  const uWord = resolveData?.undercover_word || state._dev_undercover_word || '?';
+
+  AGENT_NAMES.forEach(name => {
+    const role = state._dev_roles?.[name] || '?';
+    const word = role==='civilian'? cWord : role==='undercover'? uWord : '—';
+    const elim = state.eliminated.find(e=>e.name===name);
+    const color = colorOf(name);
+    const rc = ROLE_COLORS[role] || '#fff';
+    tbody.innerHTML += `<tr>
+      <td style="color:${color};font-weight:700">${name}</td>
+      <td><span class="role-chip" style="color:${rc};border-color:${rc}44">${ROLE_LABELS[role]||role}</span></td>
+      <td>${word}</td>
+      <td style="color:${elim?'#e74c3c':'#2ecc71'}">${elim?`Elim. R${elim.round}`:'Survived'}</td>
+    </tr>`;
+  });
+
+  $('end-screen').classList.add('visible');
+  $('again-btn').style.display = 'inline-block';
+  $('start-btn').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// API CALLS
+// ══════════════════════════════════════════════════════════════════════════════
+async function api(path, method='GET', body=null) {
+  const opts = { method, credentials:'include', headers: body ? {'Content-Type':'application/json'} : {} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch('/undercover' + path, opts);
+  if (!r.ok) throw new Error(`API ${path} → ${r.status}`);
+  return r.json();
+}
+
+// SSE stream for one discussion turn; resolves when 'done' event arrives
+function streamTurn(agentName) {
+  return new Promise((resolve, reject) => {
+    setTyping(agentName, true);
+    const color = colorOf(agentName);
+    setStreaming(agentName, color, false);
+    setSpeaking(agentName, true);
+
+    const es = new EventSource(`/undercover/stream-turn?agent=${encodeURIComponent(agentName)}`);
+    let buffer = '';
+    let streamingStarted = false;
+
+    es.onmessage = e => {
+      let data; try { data = JSON.parse(e.data); } catch { return; }
+
+      if (data.status === 'token') {
+        if (!streamingStarted) {
+          setTyping(agentName, false);
+          setStreaming(agentName, color, true);
+          streamingStarted = true;
+        }
+        buffer += data.token;
+        // Show a rolling preview of the message content (strip tags)
+        const preview = buffer.replace(/<[^>]*>/g,'').replace(/\{[^}]*\}/g,'').trim();
+        $('streaming-content').textContent = preview.slice(-200);
+      } else if (data.status === 'done') {
+        es.close();
+        setTyping(agentName, false);
+        setStreaming(agentName, color, false);
+        setSpeaking(agentName, false);
+        appendChatMsg(agentName, data.message, color);
+        resolve(data);
+      } else if (data.status === 'error') {
+        es.close(); reject(new Error(data.msg));
+      }
+    };
+    es.onerror = () => { es.close(); reject(new Error('SSE error')); };
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// GAME PHASES
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function runSpeakPhase(state) {
+  setPhase('SPEAKING', '#f39c12'); showPanel('chat');
+  setStatus('Agents are sharing their clues...');
+
+  const order = state.surviving_agents.slice();
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i+1)); [order[i],order[j]] = [order[j],order[i]];
+  }
+
+  for (const agent of order) {
+    if (agent === 'Human') {
+      // Human's speaking turn
+      setSpeaking('Human', true);
+      setStatus('YOUR TURN — type your 1-2 word clue and press Send!');
+      $('human-msg-input').placeholder = '1-2 word clue...';
+      showHumanInput(true);
+      const clue = await waitForHumanTurn(30_000, 'clue');
+      showHumanInput(false);
+      $('human-msg-input').placeholder = 'Say something to the table...';
+      setSpeaking('Human', false);
+      await sleep(1200);
+      clearBubble('Human');
+    } else {
+      setSpeaking(agent, true);
+      setStatus(`<span class="hl">${agent}</span> is thinking of a clue...`);
+      setTyping(agent, true);
+      const data = await api('/agent_clue','POST',{agent});
+      setTyping(agent, false);
+      setSpeaking(agent, false);
+      appendClue(state.round_number, agent, data.clue);
+      showBubble(agent, '"' + data.clue + '"');
+      await sleep(1600);
+      clearBubble(agent);
+      await sleep(400);
+    }
+  }
+
+  await api('/clue_phase_done','POST');
+  gameState = await api('/state');
+}
+
+// ── Countdown timer ───────────────────────────────────────────────────────────
+let _countdownInterval = null;
+function startCountdown(totalMs) {
+  const el = $('discuss-timer'); const val = $('timer-value');
+  el.classList.add('visible'); el.classList.remove('urgent');
+  const deadline = Date.now() + totalMs;
+  function tick() {
+    const rem = Math.max(0, deadline - Date.now());
+    const s = Math.ceil(rem / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(1,'0');
+    const ss = String(s % 60).padStart(2,'0');
+    val.textContent = `${mm}:${ss}`;
+    el.classList.toggle('urgent', s <= 20);
+  }
+  tick();
+  _countdownInterval = setInterval(tick, 500);
+}
+function stopCountdown() {
+  clearInterval(_countdownInterval); _countdownInterval = null;
+  const el = $('discuss-timer');
+  el.classList.remove('visible','urgent');
+}
+
+// ── Human message input ───────────────────────────────────────────────────────
+function showHumanInput(visible) {
+  $('human-input-area').classList.toggle('visible', visible);
+  if (!visible) { $('human-msg-input').value = ''; }
+}
+
+async function sendHumanMessage() {
+  const input = $('human-msg-input');
+  const btn   = $('human-msg-send');
+  const raw   = input.value.trim();
+  if (!raw) return;
+  input.value = '';
+  btn.disabled = true;
+
+  try {
+    if (humanInputMode === 'clue') {
+      const clue = raw.split(/\s+/).slice(0, 2).join(' ');
+      const data = await api('/human_clue', 'POST', { clue });
+      appendClue(gameState?.round_number || 1, 'You', data.clue);
+      showBubble('Human', '"' + data.clue + '"');
+      if (humanTurnResolve) { const fn = humanTurnResolve; humanTurnResolve = null; fn(data.clue); }
+    } else {
+      await api('/human_message', 'POST', { message: raw });
+      appendChatMsg('You', raw, '#c9a84c');
+      if (humanTurnResolve) { const fn = humanTurnResolve; humanTurnResolve = null; fn(); }
+    }
+  } catch { /* silently skip */ }
+
+  btn.disabled = false;
+  input.focus();
+}
+
+// ── Role card ─────────────────────────────────────────────────────────────────
+function showRoleCard(role, word) {
+  const ROLE_COLORS_MAP = { civilian:'#2ecc71', undercover:'#e74c3c', mr_white:'#bdc3c7' };
+  const HINTS = {
+    civilian:   'Hint at your word without saying it directly. Expose the Undercover and Mr. White.',
+    undercover: 'Blend in. Your word is similar but different — make your clues sound civilian.',
+    mr_white:   'You have no word. Listen closely to clues and fake it. Guess the civilian word if eliminated.',
+  };
+  const color = ROLE_COLORS_MAP[role] || '#fff';
+  $('role-card-name').textContent = ROLE_LABELS[role] || role;
+  $('role-card-name').style.color = color;
+  $('role-card-word').textContent = role === 'mr_white'
+    ? 'You have no word — deduce it.'
+    : `Your word: "${word}"`;
+  $('role-card-word').style.color = color;
+  $('role-card-hint').textContent = HINTS[role] || '';
+  $('role-card').classList.add('visible');
+
+  // Role indicator chip in bottom bar
+  const ind = $('role-indicator');
+  ind.style.color = color; ind.style.borderColor = color + '55';
+  ind.textContent = (role === 'mr_white' ? 'Mr. White' : ROLE_LABELS[role] || role) +
+    (role !== 'mr_white' ? ` · "${word}"` : '');
+  ind.classList.add('visible');
+
+  return new Promise(resolve => {
+    $('role-card-close').onclick = () => {
+      $('role-card').classList.remove('visible');
+      resolve();
+    };
+  });
+}
+
+// ── Human turn waiter ─────────────────────────────────────────────────────────
+// Resolves when human submits input or timeout expires.
+function waitForHumanTurn(ms, mode) {
+  humanInputMode = mode;
+  return new Promise(resolve => {
+    humanTurnResolve = resolve;
+    const effectiveMs = Math.max(1500, ms / speedMult);
+    const timer = setTimeout(() => {
+      if (!humanTurnResolve) return;
+      humanTurnResolve = null;
+      if (mode === 'clue') {
+        api('/human_clue', 'POST', { clue: '...' })
+          .then(d => { appendClue(gameState?.round_number || 1, 'You', d.clue); resolve(d.clue); })
+          .catch(() => resolve('...'));
+      } else {
+        resolve();
+      }
+    }, effectiveMs);
+    // Cancel the timer if human resolves first (humanTurnResolve will be called in sendHumanMessage)
+    const orig = humanTurnResolve;
+    humanTurnResolve = (...args) => { clearTimeout(timer); orig(...args); };
+  });
+}
+
+async function runDiscussPhase(state) {
+  const TIMEOUT_MS = 150_000; // 150 seconds hard cap
+  setPhase('DISCUSSION', '#3498db'); showPanel('chat');
+  setStatus('Discussion phase — join in or just watch.');
+
+  skipDiscussion = false;
+  $('skip-discuss-btn').style.display = 'inline-block';
+
+  showHumanInput(true);
+  startCountdown(TIMEOUT_MS);
+  const deadline = Date.now() + TIMEOUT_MS;
+
+  const order = state.discuss_order;
+  const total = state.discuss_total;
+  let i = state.discuss_turn;
+
+  while (i < order.length) {
+    if (Date.now() >= deadline) { setStatus("Time's up — moving to vote."); break; }
+    if (skipDiscussion)         { setStatus("Skipping to vote."); break; }
+
+    const agent = order[i];
+    const remaining = Math.ceil((deadline - Date.now()) / 1000);
+
+    if (agent === 'Human') {
+      const timeLeft = Math.min(25_000, deadline - Date.now());
+      if (timeLeft > 1500) {
+        setStatus(`YOUR TURN — <span class="hl">speak in the discussion!</span> (${Math.ceil(timeLeft/1000)}s)`);
+        humanInputMode = 'discuss';
+        await waitForHumanTurn(timeLeft, 'discuss');
+      }
+    } else {
+      setStatus(`Turn ${i+1}/${total} — <span class="hl">${agent}</span> speaks... (${remaining}s left)`);
+      try {
+        await streamTurn(agent);
+      } catch {
+        appendChatMsg(agent, "I need a moment to think...", colorOf(agent));
+      }
+    }
+    i++;
+
+    if (i < order.length && Date.now() < deadline) await sleep(500);
+  }
+
+  stopCountdown();
+  showHumanInput(false);
+  $('skip-discuss-btn').style.display = 'none';
+  skipDiscussion = false;
+  // Resolve any pending human turn so the loop doesn't hang
+  if (humanTurnResolve) { const fn = humanTurnResolve; humanTurnResolve = null; fn(); }
+  await api('/discuss_done','POST');
+  gameState = await api('/state');
+}
+
+async function runVotePhase(state) {
+  setPhase('VOTING', '#e74c3c'); showPanel('vote');
+  const humanAlive = state.surviving_agents.includes('Human');
+  const survivors   = state.surviving_agents;
+  // Total votes = all surviving players (LLMs + human if alive)
+  const totalVoters = survivors.length;
+  initTally(survivors);
+
+  const vb = $('vote-buttons'); vb.innerHTML = '';
+  let humanVote = null;
+
+  if (humanAlive) {
+    setStatus('Cast your vote — who do you suspect?');
+    // Vote buttons: survivors except yourself
+    survivors.filter(n => n !== 'Human').forEach(name => {
+      const color = colorOf(name);
+      const btn = document.createElement('button');
+      btn.className = 'vote-btn';
+      btn.innerHTML = `<div class="vb-dot" style="background:${color}"></div>${name}`;
+      btn.onclick = async () => {
+        if (humanVote) return;
+        humanVote = name;
+        document.querySelectorAll('.vote-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        await api('/human-vote','POST',{vote:name});
+        addTallyVote('You', name, 'Human player vote.', '#c9a84c', totalVoters);
+        setStatus(`You voted for <span class="hl">${name}</span>. Waiting for agents...`);
+      };
+      vb.appendChild(btn);
+    });
+  } else {
+    setStatus('Watching agents vote... (you have been eliminated)');
+    vb.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;padding:4px 0">You are eliminated — observe only.</div>';
+  }
+
+  // Agent votes (skip Human — they're a player, not an LLM)
+  for (const agent of survivors) {
+    if (agent === 'Human') continue;
+    await sleep(900);
+    setStatus(`<span class="hl">${agent}</span> is voting...`);
+    const data = await api('/agent_vote','POST',{agent});
+    addTallyVote(agent, data.vote, data.reason, data.color, totalVoters);
+  }
+
+  // Wait for human vote if alive and not yet cast (up to 30s)
+  if (humanAlive && !humanVote) {
+    setStatus('Agents have voted. <span class="hl">Your vote is needed!</span>');
+    await new Promise(resolve => {
+      const check = setInterval(() => { if (humanVote) { clearInterval(check); resolve(); } }, 300);
+      setTimeout(() => { clearInterval(check); resolve(); }, 30000);
+    });
+    if (!humanVote) {
+      const top = Object.entries(tallyData).sort((a,b)=>b[1].votes-a[1].votes)[0];
+      if (top) {
+        humanVote = top[0];
+        await api('/human-vote','POST',{vote:humanVote});
+        addTallyVote('You (auto)', humanVote, 'Auto-voted due to timeout.', '#888', totalVoters);
+      }
+    }
+  }
+}
+
+async function runElimPhase() {
+  setPhase('ELIMINATION', '#e74c3c');
+  setStatus('Tallying votes...');
+  await sleep(800);
+
+  const data = await api('/resolve','POST');
+  const { eliminated, role, mr_white_guess, needs_human_mrwhite_guess } = data;
+  let { game_over, winner } = data;
+  const isMe = (eliminated === 'Human');
+  const color = colorOf(eliminated);
+
+  // Popup header
+  $('elim-name').textContent = isMe ? 'YOU are eliminated!' : `${eliminated} is out!`;
+  $('elim-name').style.color = color;
+  const rc = ROLE_COLORS[role] || '#fff';
+  $('elim-role-reveal').innerHTML = `Role: <span style="color:${rc};font-weight:700">${ROLE_LABELS[role]||role}</span>`;
+  $('elim-mrwhite').style.display = 'none';
+
+  if (mr_white_guess) {
+    // LLM Mr. White guessed
+    $('elim-mrwhite').style.display = 'block';
+    $('elim-mrwhite').textContent = `${eliminated} guesses: "${mr_white_guess}" ` +
+      (winner === 'mr_white' ? '✓ CORRECT!' : '✗ Wrong.');
+  }
+
+  // Human Mr. White guess — inject an input into the popup
+  if (needs_human_mrwhite_guess) {
+    $('elim-role-reveal').innerHTML +=
+      '<br><span style="color:var(--accent-o);font-size:0.82rem">As Mr. White you get ONE guess!</span>';
+    const guessResult = await new Promise(resolve => {
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;gap:8px;margin:14px 0 4px;';
+      div.innerHTML = `
+        <input id="mrw-input" type="text" maxlength="30" placeholder="Guess the civilian word..."
+          style="flex:1;background:rgba(255,255,255,0.06);border:1px solid var(--gold);border-radius:6px;
+          color:var(--text);font-family:Share Tech Mono,monospace;font-size:0.82rem;padding:6px 10px;outline:none;">
+        <button id="mrw-btn" style="background:var(--gold-dim);border:1px solid var(--gold);color:var(--gold);
+          font-family:Rajdhani,sans-serif;font-weight:600;padding:6px 14px;border-radius:6px;cursor:pointer;">Guess</button>`;
+      $('elim-popup').insertBefore(div, $('elim-close'));
+      async function submit() {
+        const g = $('mrw-input').value.trim().split(/\s+/)[0];
+        if (!g) return;
+        div.remove();
+        const r = await api('/human_mrwhite_guess','POST',{ guess: g });
+        resolve(r);
+      }
+      $('mrw-btn').addEventListener('click', submit);
+      $('mrw-input').addEventListener('keydown', e => { if (e.key==='Enter') submit(); });
+      setTimeout(async () => {
+        if (!document.getElementById('mrw-input')) return;
+        div.remove();
+        resolve(await api('/human_mrwhite_guess','POST',{ guess: 'unknown' }));
+      }, 60000);
+    });
+    game_over = guessResult.game_over;
+    winner    = guessResult.winner;
+    if (guessResult.civilian_word) data.civilian_word = guessResult.civilian_word;
+    if (guessResult.undercover_word) data.undercover_word = guessResult.undercover_word;
+    $('elim-mrwhite').style.display = 'block';
+    $('elim-mrwhite').textContent = `You guessed: "${guessResult.guess}" ` +
+      (guessResult.correct ? '✓ CORRECT! You win!' : '✗ Wrong.');
+    data.game_over = game_over; data.winner = winner;
+  }
+
+  $('elim-popup').classList.add('visible');
+  startElimAnim(eliminated);
+  svgSetEliminated(eliminated);
+  if (isMe) setStatus('You have been eliminated. Watch the game continue...');
+
+  await new Promise(resolve => { $('elim-close').onclick = () => resolve(); });
+  $('elim-popup').classList.remove('visible');
+
+  gameState = await api('/state');
+
+  if (game_over) {
+    await sleep(600);
+    showEndScreen(gameState, data);
+  }
+
+  return data;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN GAME LOOP
+// ══════════════════════════════════════════════════════════════════════════════
+async function gameLoop() {
+  if (isBusy) return;
+  isBusy = true;
+  try {
+    while (!gameState.game_over) {
+      updateTopBar(gameState); updateDevPanel(gameState);
+
+      // Phase: speak
+      if (gameState.phase === 'speak') {
+        await runSpeakPhase(gameState);
+        gameState = await api('/state');
+      }
+
+      if (gameState.game_over) break;
+
+      // Phase: discuss
+      if (gameState.phase === 'discuss') {
+        await runDiscussPhase(gameState);
+        gameState = await api('/state');
+      }
+
+      if (gameState.game_over) break;
+
+      // Phase: vote
+      if (gameState.phase === 'vote') {
+        await runVotePhase(gameState);
+        gameState = await api('/state');
+      }
+
+      if (gameState.game_over) break;
+
+      // Eliminate
+      const elimData = await runElimPhase();
+      if (elimData.game_over) break;
+
+      gameState = await api('/state');
+      updateTopBar(gameState); updateDevPanel(gameState);
+    }
+  } catch (err) {
+    setStatus(`<span style="color:#e74c3c">Error: ${err.message}</span>`);
+    console.error(err);
+  } finally {
+    isBusy = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONTROLS & INIT
+// ══════════════════════════════════════════════════════════════════════════════
+$('start-btn').addEventListener('click', async () => {
+  $('start-btn').disabled = true;
+  setStatus('Starting game...');
+  // Reset visual state
+  lastClueRound = 0;
+  $('clue-log').innerHTML = ''; $('chat-log').innerHTML = '';
+  $('end-screen').classList.remove('visible');
+  $('escape-screen').classList.remove('visible');
+  stopCountdown(); showHumanInput(false);
+  $('again-btn').style.display = 'none'; $('start-btn').style.display = 'none';
+  Object.values(avatarMeshes).forEach(av => {
+    av.alive = true; av.elimProgress = 0;
+    av.head.material.opacity = 1; av.head.material.transparent = false;
+    av.body.material.opacity = 1; av.body.material.transparent = false;
+    av.head.position.y = 0.9;
+  });
+  buildSvgTable();
+
+  try {
+    gameState = await api('/start','POST');
+    updateTopBar(gameState); updateDevPanel(gameState);
+    showPanel('chat');
+    // Show the human player's role before the game starts
+    await showRoleCard(gameState.player_role, gameState.player_word);
+    await gameLoop();
+  } catch(e) {
+    setStatus(`<span style="color:#e74c3c">Failed to start: ${e.message}</span>`);
+    $('start-btn').disabled = false; $('start-btn').style.display = 'inline-block';
+  }
+});
+
+$('again-btn').addEventListener('click', () => {
+  $('end-screen').classList.remove('visible');
+  $('again-btn').style.display = 'none';
+  $('start-btn').style.display = 'inline-block';
+  $('start-btn').disabled = false;
+  setStatus('Press <span class="hl">Begin Game</span> to play again.');
+  setPhase('—'); setSpeaking(null, false);
+  $('role-indicator').classList.remove('visible');
+});
+
+// Escape screen play-again
+$('escape-play-again').addEventListener('click', () => {
+  $('escape-screen').classList.remove('visible');
+  $('role-indicator').classList.remove('visible');
+  $('start-btn').style.display = 'inline-block';
+  $('start-btn').disabled = false;
+  setStatus('Press <span class="hl">Begin Game</span> to play again.');
+  setPhase('WAITING');
+});
+
+// Skip discussion button
+$('skip-discuss-btn').addEventListener('click', () => { skipDiscussion = true; });
+
+// Human message send
+$('human-msg-send').addEventListener('click', sendHumanMessage);
+$('human-msg-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendHumanMessage(); });
+
+// Speed control
+document.querySelectorAll('#speed-ctrl button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    speedMult = parseInt(btn.dataset.speed);
+    document.querySelectorAll('#speed-ctrl button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Dev mode
+$('dev-btn').addEventListener('click', () => {
+  devMode = !devMode;
+  $('dev-btn').classList.toggle('active', devMode);
+  updateDevPanel(gameState);
+});
+
+// Init
+showPanel('chat');
+setStatus('Press <span class="hl">Begin Game</span> to start.');
+setPhase('WAITING');
+</script>
+</body>
+</html>

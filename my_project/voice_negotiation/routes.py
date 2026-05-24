@@ -235,6 +235,8 @@ def register_routes(app: Flask) -> None:
         data = request.get_json(silent=True) or {}
         code = str(data.get("code", "")).strip()
         success = state.try_unlock(code)
+        if success:
+            session["level_3_complete"] = True  # gates Level 4
         return jsonify({"success": success, **_serialize_state(state)})
 
     @app.route("/voice/reset", methods=["POST"])
