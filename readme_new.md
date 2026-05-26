@@ -40,61 +40,62 @@ ollama serve
 
 ### 2. Install and launch ComfyUI *(level 2 only)*
 
-```bash
-git clone https://github.com/comfyanonymous/ComfyUI.git
-cd ComfyUI
-pip install -r requirements.txt
-```
+Download and install ComfyUI from the official website: [comfy.org](https://www.comfy.org/).
+
+Once installed, open the settings and set the server port to **8000** before launching. The game expects ComfyUI to be reachable at `http://localhost:8000`.
 
 #### Download the required models
 
-The game uses **FLUX.1 Canny Dev**. You need four model files placed in specific folders inside `ComfyUI/`.
+The game uses **FLUX.1 Canny Dev**. You need four model files placed in specific folders inside your ComfyUI installation.
 
-Install the Hugging Face CLI if you don't have it, then log in (required for the gated FLUX model):
+First create a virtual environment and activate it:
 
 ```bash
-pip install huggingface_hub
-huggingface-cli login
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-Then download each file:
+Then navigate to your ComfyUI folder and install the Hugging Face library and log in (required for the gated FLUX model):
+
+```bash
+cd /path/to/ComfyUI
+pip3 install huggingface_hub
+hf auth login
+```
+
+Then download each file into the correct folder:
 
 ```bash
 # 1. Diffusion model → ComfyUI/models/unet/
-huggingface-cli download black-forest-labs/FLUX.1-Canny-dev \
+hf download black-forest-labs/FLUX.1-Canny-dev \
   flux1-canny-dev.safetensors \
-  --local-dir ComfyUI/models/unet
+  --local-dir models/unet
 
 # 2. VAE → ComfyUI/models/vae/
-huggingface-cli download black-forest-labs/FLUX.1-dev \
+hf download black-forest-labs/FLUX.1-dev \
   ae.safetensors \
-  --local-dir ComfyUI/models/vae
+  --local-dir models/vae
 
-# 3. CLIP text encoders → ComfyUI/models/clip/
-huggingface-cli download comfyanonymous/flux_text_encoders \
-  clip_l.safetensors t5xxl_fp16.safetensors \
-  --local-dir ComfyUI/models/clip
+# 3. CLIP text encoders → ComfyUI/models/text_encoders/
+hf download comfyanonymous/flux_text_encoders \
+  --include "clip_l.safetensors" \
+  --include "t5xxl_fp16.safetensors" \
+  --local-dir models/text_encoders
 ```
 
 > `flux1-canny-dev.safetensors` is ~23 GB. `t5xxl_fp16.safetensors` is ~10 GB. Total: ~35 GB.  
 > The FLUX model is gated — accept the license at [huggingface.co/black-forest-labs/FLUX.1-Canny-dev](https://huggingface.co/black-forest-labs/FLUX.1-Canny-dev) before downloading.
-
-Start ComfyUI on port 8000 (keep this terminal open):
-
-```bash
-python3 main.py --port 8000
-```
 
 ---
 
 ### 3. Install Python dependencies
 
 ```bash
-cd src_game_rooms
-pip install -r requirements.txt
+cd path/to/EscapeFromAI/src_game_rooms
+pip3 install -r requirements.txt
 ```
 
-> Requires Python ≥ 3.11. Level 3 uses `mlx-whisper` which requires Apple Silicon — on other platforms replace it with `openai-whisper` in `requirements.txt`.
+> Requires Python ≥ 3.11. The STT backend for level 3 is selected automatically: `mlx-whisper` on Apple Silicon macOS, `openai-whisper` on everything else. Both are installed by `requirements.txt` via platform markers — no manual changes needed. `openai-whisper` also requires `ffmpeg` to be installed on your system (`brew install ffmpeg` on macOS, `apt install ffmpeg` on Linux).
 
 ---
 
