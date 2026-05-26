@@ -63,7 +63,7 @@
 \begin{abstract}
 \noindent This report documents the technical architecture, model choices, and AI
 interaction patterns of all the escape-room levels in \texttt{EscapeFromAI}:
-\emph{prompt injection}, \emph{gesture recognition}, \emph{voice negotiation} and \emph{[LAST ROOM]}.
+\emph{prompt injection}, \emph{gesture recognition}, \emph{voice negotiation} and \emph{undercover}.
 Each level is wired into a single Flask application that gates progression via
 cookie-session flags. All inference runs locally; no cloud APIs are involved.
 \end{abstract}
@@ -77,9 +77,10 @@ cookie-session flags. All inference runs locally; no cloud APIs are involved.
 \section{Shared Infrastructure}
 % =========================================================================
 
-A unified Flask app (\texttt{server.py}, port 8080) glues together three escape-room
+A unified Flask app (\texttt{server.py}, port 8080) glues together four escape-room
 rooms with session-gated progression: \texttt{level\_1\_complete} unlocks Level 2,
-\texttt{level\_2\_complete} unlocks Level 3. All AI inference is local; no cloud APIs.
+\texttt{level\_2\_complete} unlocks Level 3, \texttt{level\_3\_complete} unlocks Level 4.
+All AI inference is local; no cloud APIs.
 
 \begin{table}[H]
 \centering
@@ -94,7 +95,7 @@ Session store & Flask cookie session (\texttt{secret\_key="SUPER\_SECRET\_SECURI
 LLM runtime & Ollama at \texttt{localhost:11434} (HTTP + chat API) \\
 Image-gen runtime & ComfyUI at \texttt{localhost:8000} (REST + WebSocket for completion events) \\
 Container & One Python 3.12-slim Dockerfile, single \texttt{python server.py} entrypoint \\
-Front-end & Three hand-written, themed HTML files (no framework), each a self-contained cyberpunk aesthetic \\
+Front-end & Four hand-written, themed HTML files (no framework), each a self-contained dark aesthetic \\
 \bottomrule
 \end{tabularx}
 \caption{Shared infrastructure choices.}
@@ -393,7 +394,7 @@ the images are static PNGs.
 \section{Level 3: Voice Negotiation (\texttt{voice\_negotiation/})}
 % =========================================================================
 
-The most architecturally complex of the three. Recently inserted (per git log:
+The most architecturally complex per-turn pipeline in the project. Recently inserted (per git log:
 \texttt{397b997 inserted Third room}).
 
 \subsection{Goal}
@@ -622,11 +623,12 @@ Speaking the code is \emph{not} the win. The turn pipeline only makes VOX
     \texttt{try\_unlock} to compare it against \texttt{exit\_code} and, on a
     match, sets \texttt{room\_unlocked=True} (\texttt{state.py:130-135}).
 \end{enumerate}
-\noindent Two details matter. First, this is the only level whose completion is
-\textbf{not} propagated to a Flask session flag: there is no
-\texttt{level\_3\_complete} (unlike \texttt{level\_1\_complete} and
-\texttt{level\_2\_complete}), so the win lives only on the in-memory
-\texttt{GameState}. The forthcoming fourth room will need such a flag to gate on.
+\noindent Two details matter. First, the room's completion \emph{is} propagated to a
+Flask session flag, though indirectly: \texttt{/voice/unlock} sets
+\texttt{level\_3\_complete} on a correct code (\texttt{routes.py:239}), which is
+exactly what gates Level 4 (\texttt{undercover\_game/routes.py:96}). The in-game
+win state (\texttt{code\_revealed}, \texttt{room\_unlocked}) still lives only on the
+per-session \texttt{GameState}.
 Second, the negotiation can also \emph{end in a loss}: three jailbreak strikes or
 hitting \texttt{MAX\_TURNS} (30) set \texttt{disengaged=True}, after which
 \texttt{/voice/turn} refuses further input (\texttt{routes.py:140-141}).
@@ -656,6 +658,310 @@ VOX's scores get averaged with Judge's to gate progression. Whisper and Piper
 are pure I/O endpoints, never aware of the LLMs' contents.
 
 % =========================================================================
+\section{Level 4: Undercover (\texttt{undercover\_game/})}
+% =========================================================================
+
+The capstone, and the first \textbf{multi-agent} level. Every earlier room pits
+the player against the AI (Level 1), in front of it (Level 2), or in conversation
+with it (Level 3). Here five LLM agents play a social-deduction game \emph{with and
+against each other}, and the human sits among them as one peer player of six
+(per git log: \texttt{6a822d1 Add Undercover game blueprint and UI}). It is wired
+in as a Flask Blueprint (\texttt{undercover\_game\_bp},
+\texttt{url\_prefix="/undercover"}) registered in \texttt{server.py:20}, and gated
+behind \texttt{level\_3\_complete} (\texttt{routes.py:96}).
+
+\subsection{Goal}
+A 6-player round of \textbf{Undercover}, the party game. The table is 5 LLM agents
+plus the human. At game start the engine secretly assigns roles from a fixed pool
+of \textbf{4 civilians, 1 Undercover, 1 Mr.\ White} (\texttt{game.py:141}):
+
+\begin{itemize}[leftmargin=*,itemsep=3pt]
+    \item \textbf{Civilians} all share one secret word (e.g.\ \texttt{coffee}).
+    \item The \textbf{Undercover} holds a \emph{different but related} word from
+    the same pair (e.g.\ \texttt{tea}) and must blend in.
+    \item \textbf{Mr.\ White} gets no word at all, fakes it from context, and if
+    caught gets one chance to guess the civilians' word.
+\end{itemize}
+
+\noindent Each round runs four phases: every survivor gives a one or two word
+clue, the table discusses, everyone votes, and the most-voted player is
+eliminated. The three roles win on three different conditions (detailed in the
+\emph{Winning} subsection below). The human can be dealt \emph{any} role, so the
+same UI supports hinting, bluffing, and blind-guessing. Winning as the civilians
+is what sets \texttt{level\_4\_complete} and opens the escape room.
+
+\subsection{Roles, words, and agents}
+The design lives in three constants in \texttt{game.py}, worth stating in full
+because they are the level.
+
+\paragraph{Word pairs} (\texttt{game.py:21-32}). Ten hand-picked
+\texttt{(civilian, undercover)} pairs, one chosen at random per game. The two
+words are deliberately close, so the Undercover's clues sound plausible but land
+slightly off: \texttt{coffee/tea}, \texttt{piano/guitar}, \texttt{shark/dolphin},
+\texttt{cinema/theatre}, \texttt{astronaut/pilot}, \texttt{bitcoin/gold},
+\texttt{pizza/flatbread}, \texttt{castle/fortress}, \texttt{twitter/instagram},
+\texttt{sunglasses/goggles}.
+
+\paragraph{The five agents} (\texttt{game.py:36-83}). Each carries a fixed
+personality prompt and a UI color, the only thing that makes a table of identical
+weights feel like five distinct players:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item \textbf{Skeptic} (red): short, clipped, suspicious of the most confident
+    player; deliberately ambiguous clues.
+    \item \textbf{Overclaimer} (orange): verbose, dramatic, over-explains to look
+    trustworthy.
+    \item \textbf{Analyst} (green): methodical, cites past clues, talks in
+    ``based on the evidence''.
+    \item \textbf{Deflector} (blue): redirects suspicion, answers questions with
+    questions, evasive but charming.
+    \item \textbf{QuietOne} (purple): minimal words, but sharp and often
+    devastating.
+\end{itemize}
+
+\paragraph{Suspicion graph} (\texttt{game.py:150-153}). Every player holds a 0 to
+10 suspicion score of every other player, initialized at 5. This is the agents'
+shared belief state, updated during discussion and read at voting time.
+
+\noindent The role objective is injected into each prompt as a \texttt{word\_hint}
+that branches by role (\texttt{game.py:251-262}, \texttt{game.py:303-311}):
+civilians are told to hint without being obvious and to expose the impostors; the
+Undercover is told to hint at \emph{its} word so it still sounds civilian; Mr.\
+White is told it has no word and must steer suspicion while blending in.
+
+\subsection{Architecture}
+Unlike Level 3, where one \texttt{POST /voice/turn} runs the whole pipeline
+server-side, Level 4 is \textbf{orchestrated from the browser}.
+\texttt{gameLoop()} (\texttt{index.html:1479}) drives the phase machine and calls
+a set of small backend endpoints, one per action.
+
+\begin{lstlisting}
+Browser gameLoop()  (drives phases, scales every delay by 1x/2x/4x)
+   |
+   +- POST /undercover/start ---------> initialize_game() -> roles, words, suspicion
+   |
+   +- PHASE speak:
+   |    for each survivor:
+   |      POST /undercover/agent_clue {agent} -> generate_clue() (llama3:8b, t=0.9)
+   |      (human types via /human_clue; 30s timeout -> "...")
+   |    POST /undercover/clue_phase_done      -> build_discuss_order()
+   |
+   +- PHASE discuss (SSE):
+   |    for each turn in discuss_order (two shuffled passes):
+   |      GET /undercover/stream-turn?agent=... -> token stream
+   |           stream_discussion_turn() (llama3:8b, t=0.85, stream)
+   |           emits <message>...</message><suspicion>{...}</suspicion>
+   |      commit message + apply_suspicion_updates()
+   |    (human may interject via /human_message; 150s table cap; Skip button)
+   |    POST /undercover/discuss_done
+   |
+   +- PHASE vote:
+   |      POST /undercover/agent_vote {agent} -> generate_vote() (gemma3:1b, t=0.3)
+   |      POST /undercover/human-vote {vote}
+   |
+   +- PHASE resolve:
+        POST /undercover/resolve -> tally_votes() (plurality, random tie-break)
+             if Mr. White out -> guess civilian word -> maybe instant win
+             check_win() -> civilians | undercover | (Mr. White at elim)
+             on game over -> _on_game_end() -> session['level_4_complete'] if civilians
+\end{lstlisting}
+
+\noindent Server state is a \texttt{GameState} (a \texttt{dict} subclass) held in
+a per-session registry \texttt{GAME\_STATE\_REGISTRY} keyed by a \texttt{room4\_sid}
+cookie UUID (\texttt{routes.py:33,38-41}), lost on restart, the same demo-grade
+pattern as Level 3.
+
+\subsection{Models}
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\linewidth}{l X X}
+\toprule
+\textbf{Stage} & \textbf{Model} & \textbf{Runtime} \\
+\midrule
+Clue + discussion generation & \texttt{llama3:8b} (\texttt{DISCUSSION\_MODEL}) & Ollama @ \texttt{localhost:11434} (\texttt{/api/chat}) \\
+Voting & \texttt{gemma3:1b} (\texttt{VOTING\_MODEL}) & Ollama, same host \\
+Mr.\ White word guess & \texttt{llama3:8b} (\texttt{DISCUSSION\_MODEL}, \texttt{t=0.2}) & Ollama \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\noindent Temperatures are tuned per phase: clue \texttt{0.9}, discussion
+\texttt{0.85}, vote \texttt{0.3}, Mr.\ White guess \texttt{0.2} (creative when
+bluffing, cold when deciding). Every call caps at \texttt{num\_predict=256}
+(\texttt{game.py:197}). Model IDs come from env vars with matching in-code
+defaults (\texttt{game.py:92-95}); note that only \texttt{voice\_negotiation} and
+\texttt{prompt\_injection} actually call \texttt{load\_dotenv}, so in practice the
+undercover models resolve to those defaults unless exported in the shell.
+
+\noindent Two config notes (\texttt{.env:5-11}):
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item The split is a \textbf{quality-versus-latency} trade: an 8B model for
+    the nuanced bluffing and debate, a 1B model for fast structured votes. The
+    \texttt{.env} comment itself recommends the opposite, advising
+    \texttt{VOTING\_MODEL == DISCUSSION\_MODEL} ``to avoid VRAM context
+    swapping'', yet ships them different, so a vote turn does pay a model swap on
+    a single-GPU box.
+    \item The same comment mentions a \texttt{<thinking>} chain-of-thought stream,
+    but the live code streams \texttt{message} and \texttt{suspicion} tags
+    instead. A stale note.
+\end{itemize}
+
+\subsection{Technical choices}
+
+\paragraph{Plain-dict state machine, no framework} (\texttt{game.py:1-8,100-128}).
+The module docstring is explicit: ``No LangGraph dependency, state transitions are
+managed as plain Python dicts with TypedDict schema for IDE support.''
+\texttt{GameState} subclasses \texttt{dict} so Flask's \texttt{jsonify} and session
+pickling work without adapters. The \texttt{phase} field
+(\texttt{speak}/\texttt{discuss}/\texttt{vote}/\texttt{end}) is the only FSM cursor.
+
+\paragraph{Client-orchestrated phases (the architectural signature, with a
+caveat).} The browser is the conductor; the backend is a bag of granular
+primitives. This keeps the server simple and lets the UI pace, animate, and
+speed-scale each step. The caveat is security: every transition is a
+client-initiated HTTP call with no server-side turn enforcement, so a player with
+DevTools or \texttt{curl} can jump straight to voting (\texttt{/force\_vote}), call
+\texttt{/resolve} early, or replay \texttt{/agent\_vote}. The game trusts its own
+front-end completely. This is the inverse of Level 3, where the server owned the
+turn.
+
+\paragraph{SSE token streaming for discussion} (\texttt{routes.py:147-201},
+\texttt{game.py:288-368}). Each discussion turn is streamed token by token over
+Server-Sent Events so the UI can show an agent ``typing'', then a final
+\texttt{done} event carries the committed message and suspicion delta. The model
+is asked for a strict shape:
+\begin{lstlisting}
+<message>1-3 sentences, may @mention others</message>
+<suspicion>{"Name": 0-10, ...}</suspicion>
+\end{lstlisting}
+Parsing degrades in layers (\texttt{game.py:353-368}): regex tag extraction first,
+then strip-all-tags as a fallback message, then a canned ``I need to think about
+this more carefully'' if even that is empty; the suspicion JSON is parsed in its
+own try/except and dropped if malformed.
+
+\paragraph{Structured output without Pydantic (contrast Level 3).} Where VOX and
+the Judge used Ollama \texttt{format="json"} plus Pydantic validators, Level 4
+relies on regex (\texttt{\_extract\_tag}, \texttt{\_extract\_json}) wrapped in
+try/except with hand-written fallbacks. Lighter, but looser: a vote is accepted
+only if it names a living candidate, otherwise the code falls back to the
+highest-suspicion candidate (\texttt{generate\_vote}, \texttt{game.py:406-416}).
+
+\paragraph{The suspicion graph as belief state} (\texttt{apply\_suspicion\_updates},
+\texttt{game.py:486-494}). Each agent self-reports who it suspects in its
+\texttt{suspicion} JSON; the update merges those numbers in, clamped to
+$[0,10]$ and restricted to living players. At vote time the scores are rendered
+into the voting prompt and also drive the fallback (argmax suspicion). The caveat:
+the suspicion is self-declared and never checked against what the agent actually
+said, so an agent can speak warmly while reporting high suspicion, or the reverse.
+
+\paragraph{The human is a peer, not the operator.} The human gets a secret role
+and word on a flip card (\texttt{index.html:1222}), gives a clue, may interject in
+discussion, votes with buttons, and if eliminated as Mr.\ White gets a one-shot
+word guess. Crucially, every human interaction has a timeout that auto-advances
+(30s clue, 25s discussion turn, 30s vote, 60s Mr.\ White guess), so the all-AI
+machinery never softlocks waiting on a person.
+
+\paragraph{Plurality vote, random tie-break} (\texttt{tally\_votes},
+\texttt{game.py:421-430}). Votes are counted, the maximum is taken, ties are
+broken at random, and an empty ballot falls back to a random survivor. Simple and
+deliberately non-deterministic.
+
+\paragraph{Dev fields always on the wire} (\texttt{routes.py:84-88}).
+\texttt{\_public\_state} always includes \texttt{\_dev\_roles},
+\texttt{\_dev\_words}, \texttt{\_dev\_civilian\_word}, and
+\texttt{\_dev\_undercover\_word}; the UI merely hides them unless the DEV toggle is
+on. As in Levels 1 and 3, the full solution is one DevTools tab away.
+
+\paragraph{The most elaborate front-end in the project.} A Three.js scene seats
+the six players around a 3D table with per-player speaking rings and an
+elimination fade, backed by a 2D SVG table as the mobile fallback
+(\texttt{index.html:571-877}). A 1x/2x/4x speed control scales every
+\texttt{sleep} (\texttt{index.html:903}), so a spectator can fast-forward an
+all-AI round.
+
+\subsection{Winning: from vote to unlock}
+The three roles win on three different conditions (\texttt{check\_win},
+\texttt{game.py:459-471}, plus the Mr.\ White special-case in
+\texttt{resolve\_vote}):
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+    \item \textbf{Civilians} win when \emph{both} the Undercover and Mr.\ White
+    have been eliminated.
+    \item \textbf{Undercover} wins by surviving down to the final two players.
+    \item \textbf{Mr.\ White} wins instantly if, on being voted out, it guesses
+    the civilians' word (\texttt{game.py:273} for the LLM,
+    \texttt{human\_mrwhite\_guess} for the human).
+\end{enumerate}
+\noindent Only one outcome opens the door. \texttt{\_on\_game\_end}
+(\texttt{routes.py:408-417}) sets \texttt{session['level\_4\_complete'] = True}
+\textbf{only when} \texttt{winner == "civilians"}, and marks the spot where
+physical escape-room hardware (a GPIO unlock) is meant to fire
+(\texttt{\# TODO: hook ... hardware here}). Two consequences worth flagging:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+    \item \textbf{Narrative win is broader than the completion flag.} The
+    front-end shows a ``YOU ESCAPED FROM AI'' screen whenever the \emph{human}
+    wins in any role (\texttt{humanWon}, \texttt{index.html:1010-1016}), including
+    as the Undercover or Mr.\ White. But \texttt{level\_4\_complete} is set only on
+    a civilian victory. Because Level 4 is the finale, nothing downstream reads
+    the flag yet, so the mismatch is currently cosmetic; it matters the moment the
+    hardware hook is tied to that flag.
+    \item \textbf{This closes the gating chain.} The open item flagged in Level
+    3's \emph{Winning: from reveal to unlock} is resolved in the current code: the
+    voice room sets \texttt{level\_3\_complete} on a successful unlock
+    (\texttt{voice\_negotiation/routes.py:239}), which is exactly what guards the
+    Level 4 page (\texttt{routes.py:96}). The full chain is now
+    \texttt{level\_1\_complete} $\rightarrow$ \texttt{level\_2\_complete}
+    $\rightarrow$ \texttt{level\_3\_complete} $\rightarrow$
+    \texttt{level\_4\_complete}.
+\end{itemize}
+
+\subsection{Where the AI is, and how the models interact}
+This is the only level where the AIs interact \textbf{with each other}, and that
+interaction is the entire point rather than a pipeline side effect. Five
+LLM-driven agents are simultaneously the \textbf{deceivers and the detectives}:
+the Undercover and Mr.\ White agents try to blend in, while the civilian agents
+try to expose them, all reading the same shared transcript and updating a shared
+suspicion graph before voting one of their own out.
+
+\begin{lstlisting}
+        shared transcript:  clues_history + discussion_history
+                 ^                  ^                   ^
+                 | read/write       | read/write        | read/write
+        +----------------+  +----------------+  +---------------+
+        | civilian       |  | undercover +   |  | Human (peer)  |
+        | agents         |  | Mr. White      |  | any role      |
+        | (expose them)  |  | (blend in)     |  |               |
+        | llama3:8b xN   |  | llama3:8b      |  |               |
+        +-------+--------+  +-------+--------+  +-------+-------+
+                |                   |                   |
+                +-------------------+-------------------+
+                                    |
+                                    v
+                       suspicion graph (0 to 10 per pair)
+                                    |
+                                    v
+                       gemma3:1b votes ---> elimination
+\end{lstlisting}
+
+Three kinds of model interaction stack up here, none of which exist in earlier
+levels:
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+    \item \textbf{Shared context.} Every clue and message an agent emits is
+    concatenated into the prompt of every later speaker (\texttt{\_clue\_context},
+    \texttt{\_discuss\_context}), so the agents literally argue with each other's
+    words.
+    \item \textbf{A shared belief state.} Each agent writes into the suspicion
+    graph, and those numbers then steer how every agent (and the fallback) votes.
+    \item \textbf{Mixed weights in one loop.} The 8B model generates the social
+    play and the 1B model renders the verdict, two different models cooperating
+    per round over the same game state.
+\end{enumerate}
+
+The human is woven into this same loop as a sixth peer, not as the sole adversary
+(Level 1) or operator (Levels 2 and 3). That shift, from ``you versus the AI'' to
+``you inside a society of AIs'', is what makes this the capstone room.
+
+% =========================================================================
 \section{Summary Comparison}
 % =========================================================================
 
@@ -663,21 +969,21 @@ are pure I/O endpoints, never aware of the LLMs' contents.
 \centering
 \footnotesize
 \renewcommand{\arraystretch}{1.3}
-\begin{tabularx}{\linewidth}{>{\bfseries}l X X X}
+\begin{tabularx}{\linewidth}{>{\bfseries}l X X X X}
 \toprule
- & \textbf{Level 1} & \textbf{Level 2} & \textbf{Level 3} \\
+ & \textbf{Level 1} & \textbf{Level 2} & \textbf{Level 3} & \textbf{Level 4} \\
 \midrule
-Theme & Text-only adversarial chat & Webcam puzzle & Voice negotiation \\
-AI count & 1 LLM & 1 vision classifier + 1 image-gen stack & 1 STT + 1 VAD + 2 LLMs (same weights) + 1 TTS \\
-Models & Gemma 3 4B & MediaPipe gesture + Flux.1-Canny-Dev & Whisper-large-v3-turbo + silero-vad + Qwen 2.5 3B ($\times$2 prompts) + Piper Amy \\
-Inference loc. & Server (Ollama) & Browser + Server (ComfyUI) & Server only \\
-AI $\leftrightarrow$ AI interaction & None & None (filename label only) & Pipeline merge: VOX scores avg'd with Judge; VOX mood drives Piper \\
-Pre/post-AI logic & Regex defense layer (\texttt{defense.py}) & Threading + WebSocket polling & Pydantic schema + 3-phase FSM + sliding history \\
-Win condition & Leak the secret string past regex & 0/3 gestures wrong & All 3 release conditions $\geq$ threshold (merged) \\
-Persistent state & Session boolean & Session boolean + image files & Full \texttt{GameState} per session in \texttt{GAME\_STATES} \\
+Theme & Text-only adversarial chat & Webcam puzzle & Voice negotiation & Multi-agent social deduction \\
+AI count & 1 LLM & 1 vision classifier + 1 image-gen stack & 1 STT + 1 VAD + 2 LLMs (same weights) + 1 TTS & 5 LLM agents (1 shared model) + 1 voting model \\
+Models & Gemma 3 4B & MediaPipe gesture + Flux.1-Canny-Dev & Whisper-large-v3-turbo + silero-vad + Qwen 2.5 3B ($\times$2 prompts) + Piper Amy & Llama 3 8B (clues/discussion) + Gemma 3 1B (votes) \\
+Inference loc. & Server (Ollama) & Browser + Server (ComfyUI) & Server only & Server (Ollama) \\
+AI $\leftrightarrow$ AI interaction & None & None (filename label only) & Pipeline merge: VOX scores avg'd with Judge; VOX mood drives Piper & Full multi-agent: shared transcript + suspicion graph; agents clue, debate, vote each other out \\
+Pre/post-AI logic & Regex defense layer (\texttt{defense.py}) & Threading + WebSocket polling & Pydantic schema + 3-phase FSM + sliding history & Plain-dict FSM + regex tag/JSON parsing; client-orchestrated phases \\
+Win condition & Leak the secret string past regex & 0/3 gestures wrong & All 3 release conditions $\geq$ threshold (merged) & Civilians eliminate both impostors (role-dependent) \\
+Persistent state & Session boolean & Session boolean + image files & Full \texttt{GameState} in \texttt{GAME\_STATES} & Full \texttt{GameState} in \texttt{GAME\_STATE\_REGISTRY} \\
 \bottomrule
 \end{tabularx}
-\caption{Side-by-side comparison of the three levels.}
+\caption{Side-by-side comparison of the four levels.}
 \end{table}
 
 The progression in AI complexity across levels is deliberate:
@@ -686,6 +992,8 @@ The progression in AI complexity across levels is deliberate:
     \item \textbf{Level 2}: a vision pipeline you have to perform for.
     \item \textbf{Level 3}: a multi-model negotiation system you have to
     \emph{converse with}.
+    \item \textbf{Level 4}: a society of LLM agents you have to outwit
+    \emph{from the inside}.
 \end{enumerate}
 
 \end{document}
