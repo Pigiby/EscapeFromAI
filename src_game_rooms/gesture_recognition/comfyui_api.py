@@ -7,6 +7,8 @@ import random
 from pathlib import Path
 import shutil
 
+BASE_DIR = Path(__file__).parent
+
 class ComfyUIClient:
     def __init__(self, server_address="localhost:8000"):
         self.server_address = server_address
@@ -107,7 +109,7 @@ def main():
         "ILoveYou",
     ]
 
-    prompts = load_prompts("prompts.json")
+    prompts = load_prompts(BASE_DIR / "prompts.json")
 
     sequence = [random.randint(1, 7) for _ in range(3)]
 
@@ -118,7 +120,7 @@ def main():
     client = ComfyUIClient()
 
     # --- CLEANUP SECTION ---
-    output_dir = Path("static/assets/image_sequence")
+    output_dir = BASE_DIR / "static" / "assets" / "image_sequence"
     if output_dir.exists():
         print(f"\nChecking if a sequence already exists in {output_dir}...")
         # Option A: Delete the whole folder and recreate it
@@ -138,7 +140,7 @@ def main():
             print(f"\n[{idx}/3] Generating: {selected_label}")
 
             prompt_id = client.run_workflow(
-                workflow_file="image_generation.json",
+                workflow_file=BASE_DIR / "image_generation.json",
                 prompt_text=prompt_data["positive_prompt"],
                 input_image=f"{selected_label}.png",
                 output_prefix=f"{selected_label}_{idx}"

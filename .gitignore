@@ -5,6 +5,9 @@
 /my_project/gesture_recognition/static/assets/image_sequence
 /models/*
 
+# Prompt analysis notes (documents why certain level 1 prompts fail)
+prompts.txt
+
 # CPython
 __pycache__/
 *.py[cod]

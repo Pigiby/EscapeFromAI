@@ -8,7 +8,7 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-OUTPUT_DIR = Path("static/assets/image_sequence")
+OUTPUT_DIR = Path(__file__).parent / "static" / "assets" / "image_sequence"
 EXPECTED_FILES = 3
 
 # Variabile globale per monitorare lo stato del thread
