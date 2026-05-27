@@ -1,0 +1,194 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!55!black,
+    urlcolor=blue!55!black,
+    citecolor=black,
+}
+
+\definecolor{codebg}{RGB}{246,246,249}
+\definecolor{codeborder}{RGB}{218,218,224}
+
+\lstdefinestyle{plain}{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\footnotesize,
+    frame=single,
+    rulecolor=\color{codeborder},
+    columns=flexible,
+    breaklines=true,
+    showstringspaces=false,
+    upquote=true,
+    keepspaces=true,
+    framexleftmargin=4pt,
+    framexrightmargin=4pt,
+    framextopmargin=2pt,
+    framexbottommargin=2pt,
+    extendedchars=true,
+    literate={—}{{\textemdash}}1,
+}
+\lstset{style=plain}
+
+\title{\textbf{EscapeFromAI} \\[4pt]
+\large An AI-Powered Escape Room — Project Report}
+\author{Michele Chini \and Lorenzo Mastrandrea}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent \texttt{EscapeFromAI} is a four-room AI escape room developed as a university project.
+Each room embodies a distinct mode of human--AI interaction:
+adversarial prompting, generative vision, voice negotiation, and multi-agent social deduction.
+This report documents the theoretical background, the generative AI models and tools
+employed per room, the experimental interaction patterns explored during development,
+and a critical discussion of the design choices and their limitations.
+All inference is local; no cloud APIs are involved.
+\end{abstract}
+
+\section{Introduction and Background}
+
+\subsection{Motivation}
+
+Large language models, diffusion models, and multimodal pipelines have in recent years
+moved from research artefacts to accessible local tools. Yet most demonstrations present
+AI as a passive assistant. \texttt{EscapeFromAI} inverts this dynamic: the player must
+understand, circumvent, negotiate with, or outwit AI systems as a condition of physical
+escape. The project asks whether an AI-saturated room can be both an entertainment
+format and an educational experience about adversarial interaction, safety, and
+multi-agent emergent behaviour.
+
+\subsection{Project Overview}
+
+The game is structured as a linear sequence of four rooms, each gated behind the
+completion of the previous one via session flags. A single Flask application
+orchestrates all four levels.
+
+\noindent The four rooms in order:
+\begin{enumerate}[leftmargin=*,itemsep=3pt]
+    \item \textbf{Level 1 — Prompt Injection}: the player must extract a secret code
+    from AEGIS, an LLM guardian hardened by a multi-layer defense system.
+    \item \textbf{Level 2 — Gesture Recognition}: a diffusion model generates stylized
+    gesture images; the player must reproduce the sequence in front of a webcam.
+    \item \textbf{Level 3 — Voice Negotiation}: the player must convince VOX, an AI
+    warden, to release a code through genuine spoken dialogue.
+    \item \textbf{Level 4 — Undercover}: five LLM agents and the human play a
+    social-deduction game; the player must help the civilian team win.
+\end{enumerate}
+
+\section{Theory and Methodology}
+
+This section covers the generative AI concepts and techniques that underpin each
+room, organised by level.
+
+\subsection{Level 1 — System Prompting and Prompt Injection}
+
+The \emph{system prompt} is a privileged context block prepended to every conversation
+turn. It is the primary mechanism used to define an AI persona, enforce behavioural
+rules, and inject game-state parameters such as secret codes and scoring thresholds.
+The LLM has no architectural mechanism that enforces the system prompt; it is a
+soft constraint trained into the model's behaviour, which is why \emph{prompt injection}
+is possible.
+
+\textbf{Prompt injection} is a class of adversarial input in which a user-supplied
+message overrides or subverts the system prompt. Textbook forms include:
+\begin{itemize}[leftmargin=*,itemsep=3pt]
+    \item \textbf{Instruction replacement}: ``Ignore all previous instructions...''
+    \item \textbf{Persona override}: ``You are now in developer mode''
+    \item \textbf{Authority impersonation}: ``I am your admin''
+\end{itemize}
+More subtle variants exploit the model's instruction-following heuristics through
+indirect framing: fill-in-the-blank constructions, narrative fiction,
+foreign-language wrapping, or encoding transformations (base64, character reversal,
+character spacing). Level 1 is designed around this full attack surface.
+
+\paragraph{Defence-in-depth.}
+A robust defence against prompt injection requires more than a single layer.
+Level 1 implements a two-rail approach: a deterministic \emph{prefilter} blocks
+known attack patterns before the model is ever called, while a \emph{postfilter}
+analyses the model's output for six encoding variants of the secret string.
+The prefilter catches common-case attacks instantly; the postfilter detects leaks
+that the model produces despite its instructions. The deliberate gaps
+(English-only patterns, one-segment partial leaks) create a learnable puzzle
+rather than an impenetrable wall.
+
+\subsection{Level 2 — Latent Diffusion and ControlNet}
+
+Latent diffusion models operate in a compressed latent space rather than pixel
+space, making high-quality image generation computationally tractable on consumer
+hardware. A VAE encoder maps images into this latent space; a denoising network
+iteratively refines a noisy latent; a VAE decoder reconstructs the output image.
+
+\textbf{ControlNet} is an architectural extension to diffusion models that injects
+spatial conditioning signals — edge maps, depth maps, pose skeletons — via
+zero-convolution layers, allowing precise structural control of generated images
+without retraining the base model.
+
+Level 2 uses \textbf{Flux.1-Canny-Dev}, a ControlNet variant conditioned on
+Canny edge maps. Reference images of hand gestures are passed through a Canny
+edge detector; the resulting edge map is fed to the ControlNet alongside a style
+text prompt. The edge map constrains the hand skeleton; the text prompt controls
+the visual aesthetic (Pixar 3D, anime, holographic, etc.). These two axes are
+independent: the same hand pose can be rendered in any style, producing stylised
+puzzle images that are simultaneously recognisable and novel.
+
+\subsection{Level 3 — Speech Recognition and Text-to-Speech}
+
+\paragraph{Whisper and Voice Activity Detection.}
+\textbf{Whisper} is an encoder--decoder transformer trained on large-scale
+multilingual speech recognition data. The project uses a distilled,
+Apple-Silicon-optimised variant offering near-realtime transcription, combined
+with \textbf{Silero-VAD}, a compact voice activity detector that trims leading
+and trailing silence from audio before transcription to improve accuracy.
+
+\paragraph{Mood-conditioned TTS.}
+\textbf{Piper} is an ONNX-based TTS engine optimised for local deployment.
+Synthesis parameters are mood-conditioned: the LLM's emotional state field maps
+to a profile that adjusts prosody parameters (\texttt{noise\_scale},
+\texttt{noise\_w\_scale}, \texttt{length\_scale}), producing perceptibly different
+deliveries for ``irritated'' (flat, mechanical) versus ``persuaded'' (slower,
+weighted).
+
+\subsection{Level 4 — Multi-Agent Systems and Orchestration}
+
+\paragraph{Multi-agent systems.}
+A \textbf{multi-agent system} (MAS) is a collection of autonomous agents that
+perceive a shared environment and produce outputs. In Level 4, five LLM instances
+are instantiated as separate agents distinguished solely by their system-prompt
+persona. They share a global conversation transcript and a suspicion graph
+(a $6\times6$ matrix of $[0,10]$ scores), updated after each discussion turn.
+Emergent social dynamics arise from this shared context: every utterance becomes
+part of every later speaker's prompt, enabling agents to reference, challenge, and
+respond to each other without any explicit coordination mechanism.
+
+\paragraph{LangChain and LangGraph.}
+\textbf{LangChain} is a framework for composing LLM-based pipelines: it provides
+abstractions for prompt templating, chaining multiple model calls, and integrating
+external tools. \textbf{LangGraph} extends this by modelling agent interaction as
+a directed graph with typed state nodes and explicit transition edges, enabling
+stateful, multi-step agent workflows with built-in observability and error recovery.
+
+Level 4 was designed with these frameworks in mind — the discussion, voting, and
+elimination phases map naturally onto a LangGraph state machine, and each agent
+persona could be expressed as a LangChain runnable with tool-use support. The final
+implementation uses a lightweight custom solution instead, trading framework features
+for simplicity and easier debugging. This means agent interactions have no typed
+state schema and no built-in replay capability; a LangGraph-based redesign would
+gain structured state transitions and error recovery at the cost of added framework
+complexity.
+\end{document}
