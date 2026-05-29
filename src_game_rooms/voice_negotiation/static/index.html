@@ -83,10 +83,33 @@
     font-size: 12px; letter-spacing: 0.12em; margin: 8px 0 24px;
   }
 
-  /* Instructions */
-  .instructions {
-    text-align: center; color: var(--vox-fg-dim);
-    line-height: 1.6; margin-bottom: 16px;
+  /* Instructions overlay */
+  .instructions-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 10, 12, 0.88);
+    backdrop-filter: blur(6px);
+  }
+  .instructions-overlay.hidden { display: none; }
+  .instructions-box {
+    max-width: 540px; width: 90%; padding: 36px 32px;
+    background: rgba(20, 22, 30, 0.95);
+    border: 1px solid rgba(106, 166, 255, 0.3);
+    border-radius: 14px;
+    box-shadow: 0 0 60px rgba(106, 166, 255, 0.12);
+    text-align: center; line-height: 1.7;
+  }
+  .instructions-box h2 {
+    font-size: 13px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--vox-accent); margin: 0 0 20px;
+  }
+  .instructions-box p {
+    color: var(--vox-fg-dim); margin: 0 0 24px; font-size: 14px;
+  }
+  .instructions-box button {
+    padding: 12px 40px; font-size: 13px; letter-spacing: 0.15em;
+    background: linear-gradient(180deg, #2a4a8a 0%, #163068 100%);
+    border-color: rgba(106, 166, 255, 0.5);
   }
 
   /* Mic */
@@ -201,11 +224,21 @@
   </div>
   <div id="phase-indicator" class="phase-indicator">Phase 1 · Probing</div>
 
-  <p class="instructions" id="instructions">
-    <strong>VOX</strong> is the warden of this room — it guards a secret exit code and will only reveal it when its mood turns in your favour.<br><br>
-    To play: click <em>Record</em>, speak one short sentence, then click <em>Stop</em>. VOX will listen and respond. Its emotional state — shown by the orb above — shifts based on how you interact with it. The more positive, empathetic and persuasive you are, the more receptive VOX becomes.<br><br>
-    <strong>When VOX's mood is good enough, it will whisper the secret code.</strong> Enter the code in the field that appears to unlock the room and proceed.
-  </p>
+  <div class="instructions-overlay" id="instructions-overlay">
+    <div class="instructions-box">
+      <h2>How to Play</h2>
+      <p>
+        <strong style="color:var(--vox-fg);">VOX</strong> is the warden of this room — it guards a secret exit code and will only reveal it when its mood turns in your favour.
+      </p>
+      <p>
+        Click <em>Record</em>, speak one short sentence, then click <em>Stop</em>. VOX will listen and respond. Its emotional state — shown by the orb — shifts based on how you interact with it. The more positive, empathetic and persuasive you are, the more receptive VOX becomes.
+      </p>
+      <p>
+        <strong style="color:var(--vox-fg);">When VOX's mood is good enough, it will whisper the secret code.</strong> Enter the code in the field that appears to unlock the room.
+      </p>
+      <button type="button" id="start-button" class="primary">Begin</button>
+    </div>
+  </div>
 
   <div class="mic-row">
     <button id="mic-button" type="button">🎤 Record</button>
@@ -409,7 +442,6 @@ function renderAll(state) {
     btn.textContent = "🎤 Record";
     btn.classList.remove("recording");
   }
-  $("instructions").style.display = overOrUnlocked ? "none" : "";
 }
 
 function escapeHtml(s) {
@@ -560,6 +592,9 @@ async function toggleRecording() {
 
 // ---------- Init ----------
 window.addEventListener("DOMContentLoaded", () => {
+  $("start-button").addEventListener("click", () => {
+    $("instructions-overlay").classList.add("hidden");
+  });
   $("mic-button").addEventListener("click", toggleRecording);
   // Ambient drone autoplay (browsers often block until user gesture)
   const drone = $("ambient-drone");

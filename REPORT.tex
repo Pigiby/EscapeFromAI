@@ -7,6 +7,8 @@
 \usepackage[margin=2.4cm]{geometry}
 \usepackage{enumitem}
 \usepackage{parskip}
+\usepackage{graphicx}
+\usepackage{subcaption}
 \usepackage{float}
 \usepackage{booktabs}
 \usepackage{tabularx}
@@ -51,12 +53,7 @@
 \maketitle
 
 \begin{abstract}
-\noindent \texttt{EscapeFromAI} is a four-room AI escape room developed as a university project.
-Each room embodies a distinct mode of human-AI interaction:
-adversarial prompting, generative vision, voice negotiation, and multi-agent social deduction.
-This report documents the theoretical background, the generative AI models and tools
-employed per room, the experimental interaction patterns explored during development,
-and a critical discussion of the design choices and their limitations.
+\noindent \texttt{EscapeFromAI} is a four-room AI escape room developed as a university project.This report documents the theoretical background, the generative AI models and tools employed per room, the experimental interaction patterns explored during development, and a final discussion about the project.
 All inference is local; no cloud APIs are involved.
 \end{abstract}
 
@@ -64,7 +61,7 @@ All inference is local; no cloud APIs are involved.
 
 \subsection{Motivation}
 
-In recent years, large language models, diffusion models, and multimodal pipelines have transitioned from research artefacts to accessible local tools. However, most applications still cast AI in the role of a passive assistant. \texttt{EscapeFromAI} subverts this dynamic: to physically escape, the player must actively understand, circumvent, negotiate with, or outwit these systems. Ultimately, this project explores whether an AI-saturated environment can serve as both an engaging entertainment format and a rigorous educational platform for studying adversarial interaction, AI safety, and multi-agent emergent behaviour.
+In recent years, large language models, diffusion models, and automated pipelines have reached an always increasing public attention, therefore the objective of \texttt{EscapeFromAI} is to create a game where the player can  be in touch with different generative AI models and tools, exploring their capabilities and limitations in a playful way. The game is structured as a sequence of four rooms, each designed around a specific interaction paradigm: prompt injection, generative vision, voice negotiation, and multi-agent systems. By progressing through these rooms, players experience a variety of AI-driven challenges all deployed locally.
 
 \subsection{Project Overview}
 
@@ -121,69 +118,83 @@ that the model produces despite its instructions. The deliberate gaps
 rather than an impenetrable wall.
 
 \subsection{Level 2: Latent Diffusion and ControlNet}
-
-Latent diffusion models operate in a compressed latent space rather than pixel
-space, making high-quality image generation computationally tractable on consumer
-hardware. A VAE encoder maps images into this latent space; a denoising network
-iteratively refines a noisy latent; a VAE decoder reconstructs the output image.
-
-\textbf{ControlNet} is an architectural extension to diffusion models that injects
-spatial conditioning signals (edge maps, depth maps, pose skeletons) via
-zero-convolution layers, allowing precise structural control of generated images
-without retraining the base model.
+The second room is built around a generative vision pipeline that combines a latent diffusion model with ControlNet conditioning. Latent diffusion models are a class of generative models that produce high-quality images by iteratively denoising a latent representation. ControlNet is an architectural extension that allows conditioning the generation process on additional inputs, such as edge maps, enabling precise control over the structure of the generated image. All this additional workflow is done without any additional training.
 
 Level 2 uses \textbf{Flux.1-Canny-Dev}, a ControlNet variant conditioned on
 Canny edge maps. Reference images of hand gestures are passed through a Canny
-edge detector; the resulting edge map is fed to the ControlNet alongside a style
-text prompt. The edge map constrains the hand skeleton; the text prompt controls
-the visual aesthetic (Pixar 3D, anime, holographic, etc.). These two axes are
-independent: the same hand pose can be rendered in any style, producing stylised
+edge detector; the resulting edge map is fed to the ControlNet alongside a style text prompt. The edge map constrains the hand skeleton; the text prompt controls the visual aesthetic (Pixar 3D, anime, holographic, etc.). These two axes are independent: the same hand pose can be rendered in any style, producing stylised
 puzzle images that are simultaneously recognisable and novel.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.30\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{images_report/ILoveYou.png}
+        \caption{Conditional image: the reference hand gesture used as structural input to ControlNet.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.30\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{images_report/ComfyUI_temp_bhdxo_00001_.png}
+        \caption{Canny edge map: the structural constraint extracted from the reference and fed to ControlNet.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.30\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{images_report/ComfyUI_temp_ybksz_00001_.png}
+        \caption{Final result: the stylised image generated by Flux.1-Canny-Dev conditioned on the edge map.}
+    \end{subfigure}
+    \caption{ControlNet pipeline: from conditional reference image to Canny edge map to stylised output.}
+    \label{fig:controlnet-pipeline}
+\end{figure}
 
 \subsection{Level 3: Speech Recognition and Text-to-Speech}
 
 \paragraph{Whisper and Voice Activity Detection.}
 \textbf{Whisper} is an encoder-decoder transformer trained on large-scale
-multilingual speech recognition data. The project uses a distilled,
-Apple-Silicon-optimised variant offering near-realtime transcription, combined
-with \textbf{Silero-VAD}, a compact voice activity detector that trims leading
-and trailing silence from audio before transcription to improve accuracy.
+multilingual speech recognition data. But the generative part is left to the TTS (Text-to-Speech) model \textbf{Piper}, which is is an ONNX-based neural text-to-speech engine that synthesises speech from a compact VITS-family acoustic model (\texttt{en\_US-amy-medium}), outputting 16-bit PCM WAV entirely in memory. Being a neural generative model, Piper does not concatenate pre-recorded audio segments but produces waveforms from scratch by decoding a latent acoustic representation, which makes it highly flexible in terms of prosody control.
 
-\paragraph{Mood-conditioned TTS.}
-\textbf{Piper} is an ONNX-based TTS engine optimised for local deployment.
-Synthesis parameters are mood-conditioned: the LLM's emotional state field maps
-to a profile that adjusts prosody parameters (\texttt{noise\_scale},
-\texttt{noise\_w\_scale}, \texttt{length\_scale}), producing perceptibly different
-deliveries for ``irritated'' (flat, mechanical) versus ``persuaded'' (slower,
-weighted).
+This flexibility is exploited through \emph{mood-conditioned synthesis}: the LLM backing VOX produces a structured response that includes an \texttt{emotion} field, mapped at synthesis time to one of four profiles that tune three prosody knobs:
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Mood} & \texttt{length\_scale} & \texttt{noise\_scale} & \texttt{noise\_w\_scale} \\
+\midrule
+neutral    & 1.00 & 0.667 & 0.80 \\
+interested & 0.82 & 0.95  & 1.05 \\
+irritated  & 0.85 & 0.20  & 0.40 \\
+persuaded  & 1.22 & 0.85  & 1.10 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent \texttt{length\_scale} controls pacing ($<1$ = faster), \texttt{noise\_scale} controls timbral expressiveness (low = flat/monotone), and \texttt{noise\_w\_scale} controls rhythmic naturalness (low = mechanical). An irritated VOX therefore sounds clipped and robotic, while a persuaded VOX speaks slowly and warmly, giving the player direct acoustic feedback on how the negotiation is progressing.
 
 \subsection{Level 4: Multi-Agent Systems and Orchestration}
 
 \paragraph{Multi-agent systems.}
 A \textbf{multi-agent system} (MAS) is a collection of autonomous agents that
-perceive a shared environment and produce outputs. In Level 4, five LLM instances
-are instantiated as separate agents distinguished solely by their system-prompt
-persona. They share a global conversation transcript and a suspicion graph
-(a $6\times6$ matrix of $[0,10]$ scores), updated after each discussion turn.
-Emergent social dynamics arise from this shared context: every utterance becomes
-part of every later speaker's prompt, enabling agents to reference, challenge, and
-respond to each other without any explicit coordination mechanism.
+perceive a shared environment and produce outputs. In Level 4, five LLM agents
+(\textit{Skeptic}, \textit{Overclaimer}, \textit{Analyst}, \textit{Deflector},
+\textit{QuietOne}) and the human player compete in a social-deduction game.
+Each agent is distinguished solely by its system-prompt persona; there is no
+separate neural architecture per agent.
 
 \paragraph{LangChain and LangGraph.}
-\textbf{LangChain} is a framework for composing LLM-based pipelines: it provides
-abstractions for prompt templating, chaining multiple model calls, and integrating
-external tools. \textbf{LangGraph} extends this by modelling agent interaction as
-a directed graph with typed state nodes and explicit transition edges, enabling
-stateful, multi-step agent workflows with built-in observability and error recovery.
+\textbf{LangChain} is a framework for composing LLM-based pipelines. Its main
+building blocks are prompt templates, model wrappers, and output parsers that can
+be chained together into a single callable unit. In Level 4, LangChain is used to
+structure all interactions with the local Ollama models: each game phase (clue
+giving, discussion, voting, and the Mr.\ White word-guess) has its own prompt
+template that formats the agent's persona, the shared game context, and a strict
+output format instruction before calling the model.
 
-Level 4 was designed with these frameworks in mind: the discussion, voting, and
-elimination phases map naturally onto a LangGraph state machine, and each agent
-persona could be expressed as a LangChain runnable with tool-use support. The final
-implementation uses a lightweight custom solution instead, trading framework features
-for simplicity and easier debugging. This means agent interactions have no typed
-state schema and no built-in replay capability; a LangGraph-based redesign would
-gain structured state transitions and error recovery at the cost of added framework
-complexity.
+\textbf{LangGraph} extends LangChain by letting developers express an agent
+workflow as a directed graph: nodes represent actions or model calls, and edges
+define which node can follow which, so the execution is constrained to follow only
+the transitions the developer has explicitly declared. In Level 4, the game phases map naturally onto such a graph, where each phase is a node and
+the edges enforce the legal sequence of transitions.
 \section{Experiments}
 
 The experiments described below were conducted during development and evaluation of
